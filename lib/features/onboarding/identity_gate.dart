@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/identity/identity_store.dart';
+import '../../data/family_seed.dart';
 import '../home/premium_home_screen_v3.dart';
 import 'identity_setup_screen.dart';
 
@@ -24,14 +25,27 @@ class _IdentityGateState extends State<IdentityGate> {
 
   Future<void> _load() async {
     final value = await store.load();
+    final valid = value != null &&
+        familyMembers.any(
+          (member) => member.name.toLowerCase() == value.toLowerCase(),
+        );
+    if (!valid && value != null) await store.clear();
     if (!mounted) return;
     setState(() {
-      selected = value;
+      selected = valid
+          ? familyMembers
+              .firstWhere(
+                (member) => member.name.toLowerCase() == value!.toLowerCase(),
+              )
+              .name
+          : null;
       loading = false;
     });
   }
 
   Future<void> _select(String name) async {
+    final valid = familyMembers.any((member) => member.name == name);
+    if (!valid) return;
     await store.save(name);
     if (!mounted) return;
     setState(() => selected = name);
@@ -47,10 +61,17 @@ class _IdentityGateState extends State<IdentityGate> {
   Widget build(BuildContext context) {
     if (loading) {
       return Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
       );
     }
     if (selected == null) return IdentitySetupScreen(onSelected: _select);
-    return PremiumHomeScreenV3(viewerName: selected!, onSwitchProfile: _switchProfile);
+    return PremiumHomeScreenV3(
+      viewerName: selected!,
+      onSwitchProfile: _switchProfile,
+    );
   }
 }
