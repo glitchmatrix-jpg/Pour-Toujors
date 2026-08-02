@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'package:pour_toujours/app/theme/pour_toujours_theme.dart';
@@ -9,7 +9,7 @@ import 'package:pour_toujours/core/release/v1_platform_services.dart';
 import 'package:pour_toujours/features/settings/v1_release_center.dart';
 
 void main() {
-  setUpAll(tz.initializeTimeZones);
+  setUpAll(tzdata.initializeTimeZones);
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
