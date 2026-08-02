@@ -4,46 +4,6 @@ import 'package:http/http.dart' as http;
 
 import 'weather_models.dart';
 
-class CityWeather {
-  const CityWeather({
-    required this.temperature,
-    required this.feelsLike,
-    required this.windSpeed,
-    required this.code,
-    required this.isDay,
-    required this.high,
-    required this.low,
-    required this.rainChance,
-    required this.sunrise,
-    required this.sunset,
-    this.isLive = true,
-  });
-
-  final double temperature;
-  final double feelsLike;
-  final double windSpeed;
-  final int code;
-  final bool isDay;
-  final double high;
-  final double low;
-  final int rainChance;
-  final DateTime sunrise;
-  final DateTime sunset;
-  final bool isLive;
-
-  String get condition => isLive ? weatherCodeLabel(code) : 'Weather unavailable';
-
-  String get practicalLine {
-    if (!isLive) return 'Pull down to retry live weather';
-    if (code >= 95) return 'Storms may disrupt plans';
-    if (rainChance >= 65) return 'Rain is likely today';
-    if (feelsLike >= 38) return 'Dangerously hot outside';
-    if (temperature <= 2) return 'Very cold outside';
-    if (windSpeed >= 35) return 'Strong winds outside';
-    return 'No major disruption expected';
-  }
-}
-
 class WeatherService {
   WeatherService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -59,33 +19,7 @@ class WeatherService {
   static final Map<String, WeatherBundle> _cache = {};
   static final Map<String, Future<WeatherBundle>> _inFlight = {};
   static const cacheLifetime = Duration(minutes: 20);
-
-  /// Deterministic compatibility override used by widget tests.
-  static Map<String, CityWeather>? debugOverrides;
   static Map<String, WeatherBundle>? debugBundleOverrides;
-
-  Future<CityWeather> fetch(String cityId, {bool forceRefresh = false}) async {
-    final override = debugOverrides?[cityId];
-    if (override != null) return override;
-    try {
-      final bundle = await fetchBundle(cityId, forceRefresh: forceRefresh);
-      final today = bundle.daily.first;
-      return CityWeather(
-        temperature: bundle.current.temperature,
-        feelsLike: bundle.current.feelsLike,
-        windSpeed: bundle.current.windSpeed,
-        code: bundle.current.weatherCode,
-        isDay: bundle.current.isDay,
-        high: today.high,
-        low: today.low,
-        rainChance: today.precipitationProbability,
-        sunrise: today.sunrise,
-        sunset: today.sunset,
-      );
-    } catch (_) {
-      return _offline();
-    }
-  }
 
   Future<WeatherBundle> fetchBundle(
     String cityId, {
@@ -98,7 +32,9 @@ class WeatherService {
     final fresh = cached != null &&
         DateTime.now().difference(cached.updatedAt) < cacheLifetime;
     if (!forceRefresh && fresh) return cached;
-    if (!forceRefresh && _inFlight[cityId] case final request?) return request;
+
+    final inFlight = _inFlight[cityId];
+    if (!forceRefresh && inFlight != null) return inFlight;
 
     final request = _request(cityId);
     _inFlight[cityId] = request;
@@ -169,7 +105,10 @@ class WeatherService {
         .get(uri, headers: const {'Accept': 'application/json'})
         .timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      throw http.ClientException('Weather request failed: ${response.statusCode}', uri);
+      throw http.ClientException(
+        'Weather request failed: ${response.statusCode}',
+        uri,
+      );
     }
     return _parse(cityId, jsonDecode(response.body) as Map<String, dynamic>);
   }
@@ -178,32 +117,36 @@ class WeatherService {
     final current = data['current'] as Map<String, dynamic>;
     final hourly = data['hourly'] as Map<String, dynamic>;
     final daily = data['daily'] as Map<String, dynamic>;
-
     final hourlyTimes = _strings(hourly, 'time');
-    final hourlyItems = List<HourlyWeather>.generate(hourlyTimes.length, (index) {
-      return HourlyWeather(
+    final dailyTimes = _strings(daily, 'time');
+
+    final hourlyItems = List<HourlyWeather>.generate(
+      hourlyTimes.length,
+      (index) => HourlyWeather(
         time: DateTime.parse(hourlyTimes[index]),
         temperature: _numberAt(hourly, 'temperature_2m', index),
         feelsLike: _numberAt(hourly, 'apparent_temperature', index),
         weatherCode: _intAt(hourly, 'weather_code', index),
-        precipitationProbability: _intAt(hourly, 'precipitation_probability', index),
+        precipitationProbability:
+            _intAt(hourly, 'precipitation_probability', index),
         precipitation: _numberAt(hourly, 'precipitation', index),
         windSpeed: _numberAt(hourly, 'wind_speed_10m', index),
         windGusts: _numberAt(hourly, 'wind_gusts_10m', index),
         humidity: _intAt(hourly, 'relative_humidity_2m', index),
         uvIndex: _numberAt(hourly, 'uv_index', index),
         visibility: _numberAt(hourly, 'visibility', index),
-      );
-    });
+      ),
+    );
 
-    final dailyTimes = _strings(daily, 'time');
-    final dailyItems = List<DailyWeather>.generate(dailyTimes.length, (index) {
-      return DailyWeather(
+    final dailyItems = List<DailyWeather>.generate(
+      dailyTimes.length,
+      (index) => DailyWeather(
         date: DateTime.parse(dailyTimes[index]),
         weatherCode: _intAt(daily, 'weather_code', index),
         high: _numberAt(daily, 'temperature_2m_max', index),
         low: _numberAt(daily, 'temperature_2m_min', index),
-        precipitationProbability: _intAt(daily, 'precipitation_probability_max', index),
+        precipitationProbability:
+            _intAt(daily, 'precipitation_probability_max', index),
         precipitation: _numberAt(daily, 'precipitation_sum', index),
         windMaximum: _numberAt(daily, 'wind_speed_10m_max', index),
         gustMaximum: _numberAt(daily, 'wind_gusts_10m_max', index),
@@ -213,8 +156,8 @@ class WeatherService {
           seconds: _numberAt(daily, 'daylight_duration', index).round(),
         ),
         uvMaximum: _numberAt(daily, 'uv_index_max', index),
-      );
-    });
+      ),
+    );
 
     final rainChance = hourlyItems.isEmpty
         ? 0
@@ -250,27 +193,17 @@ class WeatherService {
 
   static List<String> _strings(Map<String, dynamic> map, String key) =>
       (map[key] as List<dynamic>).cast<String>();
-  static double _numberAt(Map<String, dynamic> map, String key, int index) =>
+
+  static double _numberAt(
+    Map<String, dynamic> map,
+    String key,
+    int index,
+  ) =>
       _number((map[key] as List<dynamic>)[index]);
+
   static int _intAt(Map<String, dynamic> map, String key, int index) =>
       _integer((map[key] as List<dynamic>)[index]);
+
   static double _number(Object? value) => (value as num?)?.toDouble() ?? 0;
   static int _integer(Object? value) => (value as num?)?.toInt() ?? 0;
-
-  CityWeather _offline() {
-    final now = DateTime.now();
-    return CityWeather(
-      temperature: 0,
-      feelsLike: 0,
-      windSpeed: 0,
-      code: 3,
-      isDay: now.hour >= 6 && now.hour < 18,
-      high: 0,
-      low: 0,
-      rainChance: 0,
-      sunrise: DateTime(now.year, now.month, now.day, 6),
-      sunset: DateTime(now.year, now.month, now.day, 18),
-      isLive: false,
-    );
-  }
 }
