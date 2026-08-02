@@ -1,3 +1,4 @@
+import 'family_graph.dart';
 import 'family_seed.dart';
 
 class FamilyBirthday {
@@ -29,29 +30,9 @@ const familyBirthdays = <FamilyBirthday>[
   FamilyBirthday('Affan', 11, 28),
 ];
 
-String relationshipFor({required FamilyMember viewer, required FamilyMember person}) {
-  if (viewer.name == person.name) return 'You';
-
-  const children = {'Hasan', 'Ramsha', 'Salman'};
-  const parents = {'Talat', 'Shahid'};
-  const grandparents = {'Ami', 'Nanu'};
-
-  if (children.contains(viewer.name) && children.contains(person.name)) {
-    return person.name == 'Ramsha' ? 'Sister' : 'Brother';
-  }
-  if (children.contains(viewer.name) && parents.contains(person.name)) {
-    return person.name == 'Talat' ? 'Mother' : 'Father';
-  }
-  if (parents.contains(viewer.name) && children.contains(person.name)) {
-    return person.name == 'Ramsha' ? 'Daughter' : 'Son';
-  }
-  if (children.contains(viewer.name) && grandparents.contains(person.name)) {
-    return person.name == 'Ami' ? 'Grandmother' : 'Grandfather';
-  }
-  if (grandparents.contains(viewer.name) && children.contains(person.name)) {
-    return person.name == 'Ramsha' ? 'Granddaughter' : 'Grandson';
-  }
-
-  if (viewer.name == 'Hasan') return person.relationship;
-  return cities.firstWhere((city) => city.id == person.cityId).name;
+String relationshipFor({
+  required FamilyMember viewer,
+  required FamilyMember person,
+}) {
+  return familyGraph.relationship(viewer: viewer.name, person: person.name);
 }
