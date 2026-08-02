@@ -11,10 +11,7 @@ abstract final class PourToujoursRouteNames {
   static const hourlyWeather = '/weather/hourly';
   static const weatherCompare = '/weather/compare';
   static const person = '/person';
-
-  /// Kept only so retired source files continue to analyze. No route handles it.
   static const overlapPlanner = '/planner-retired';
-
   static const calendar = '/calendar';
   static const eventEditor = '/event';
   static const holiday = '/holiday';
@@ -41,10 +38,20 @@ abstract final class PourToujoursRoutes {
   static String viewerName = 'Hasan';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
-    final args = settings.arguments is DetailRouteArgs
+    final deepLinkedCity = _cityFromRoute(settings.name);
+    final supplied = settings.arguments is DetailRouteArgs
         ? settings.arguments! as DetailRouteArgs
-        : const DetailRouteArgs(title: 'Pour Toujours');
-    final page = _pageFor(settings.name, args);
+        : null;
+    final args = supplied ??
+        DetailRouteArgs(
+          title: deepLinkedCity ?? 'Pour Toujours',
+          payload: deepLinkedCity,
+          viewerName: viewerName,
+        );
+    final normalizedName = deepLinkedCity == null
+        ? settings.name
+        : PourToujoursRouteNames.city;
+    final page = _pageFor(normalizedName, args);
     if (page == null) return null;
     return PageRouteBuilder<void>(
       settings: settings,
@@ -70,6 +77,19 @@ abstract final class PourToujoursRoutes {
     );
   }
 
+  static String? _cityFromRoute(String? name) {
+    if (name == null) return null;
+    final uri = Uri.tryParse(name);
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (segments.length == 2 && segments.first == 'city') {
+      final city = segments.last.toLowerCase();
+      if (const {'karachi', 'chiba', 'dublin', 'hattiesburg'}.contains(city)) {
+        return city;
+      }
+    }
+    return null;
+  }
+
   static Widget? _pageFor(String? name, DetailRouteArgs args) {
     if (name == PourToujoursRouteNames.city) {
       final payload = args.payload;
@@ -89,16 +109,12 @@ abstract final class PourToujoursRoutes {
     if (name == PourToujoursRouteNames.hourlyWeather ||
         name == PourToujoursRouteNames.dailyWeather) {
       if (args.payload is HourlyRoutePayload) {
-        return HourlyForecastScreen(
-          payload: args.payload! as HourlyRoutePayload,
-        );
+        return HourlyForecastScreen(payload: args.payload! as HourlyRoutePayload);
       }
       return _FoundationDetailPage(args: args);
     }
     if (name == PourToujoursRouteNames.weatherCompare) {
-      return WeatherComparisonScreen(
-        viewerName: args.viewerName ?? viewerName,
-      );
+      return WeatherComparisonScreen(viewerName: args.viewerName ?? viewerName);
     }
     if (name == PourToujoursRouteNames.alert &&
         args.payload is FamilyWeatherAlert) {
