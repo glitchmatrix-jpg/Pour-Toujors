@@ -14,6 +14,7 @@ import '../../data/family_context.dart';
 import '../../data/family_graph.dart';
 import '../../data/family_seed.dart';
 import '../navigation/detail_placeholders.dart';
+import '../people/family_calendar_final.dart';
 import '../people/people_calendar_experience.dart';
 import '../settings/settings_screen.dart';
 import '../today/atlas_today_screen.dart';
@@ -164,7 +165,7 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3>
         },
       ),
       _PeoplePage(viewer: viewer, snapshots: snapshots),
-      FamilyCalendarScreen(viewerName: viewer.name),
+      FamilyCalendarFinalScreen(viewerName: viewer.name),
       SettingsScreen(
         viewerName: viewer.name,
         viewerInitials: viewer.initials,
