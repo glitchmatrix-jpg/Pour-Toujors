@@ -6,6 +6,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:pour_toujours/app/theme/pour_toujours_theme.dart';
 import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/data/family_graph.dart';
+import 'package:pour_toujours/features/people/family_calendar_final.dart';
 import 'package:pour_toujours/features/people/people_calendar_experience.dart';
 
 void main() {
@@ -53,8 +54,8 @@ void main() {
   test('family events round-trip in UTC without changing participants', () {
     final event = FamilyEvent(
       id: 'event-1',
-      title: 'Family call',
-      type: FamilyEventType.familyCall,
+      title: 'Family dinner',
+      type: FamilyEventType.dinner,
       utcStart: DateTime.utc(2026, 11, 1, 15, 30),
       timezone: 'America/Chicago',
       participants: const ['Hasan', 'Ramsha'],
@@ -66,7 +67,9 @@ void main() {
     expect(restored.participants, ['Hasan', 'Ramsha']);
   });
 
-  testWidgets('monthly calendar works on a narrow dark phone', (tester) async {
+  testWidgets('polished monthly calendar works on a narrow dark phone', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -82,36 +85,35 @@ void main() {
           theme: PourToujoursTheme.build(settings.theme, Brightness.light),
           darkTheme: PourToujoursTheme.build(settings.theme, Brightness.dark),
           themeMode: ThemeMode.dark,
-          home: const FamilyCalendarScreen(viewerName: 'Hasan'),
+          home: const FamilyCalendarFinalScreen(viewerName: 'Hasan'),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byKey(const ValueKey('polished-month-grid')), findsOneWidget);
     expect(find.text('Birthdays'), findsOneWidget);
     expect(find.text('Holidays'), findsOneWidget);
     expect(find.text('Family events'), findsOneWidget);
+    expect(find.text('Add event'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('contact planner explains scored alternatives', (tester) async {
+  testWidgets('planner is not part of the final product surface', (
+    tester,
+  ) async {
     final settings = const AppSettings(reducedMotion: true);
     await tester.pumpWidget(
       AppSettingsScope(
         controller: AppSettingsController(initial: settings),
         child: MaterialApp(
           theme: PourToujoursTheme.build(settings.theme, Brightness.light),
-          home: const ContactPlannerScreen(viewerName: 'Hasan'),
+          home: const FamilyCalendarFinalScreen(viewerName: 'Hasan'),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Family contact planner'), findsOneWidget);
-    expect(find.textContaining('likely free'), findsWidgets);
-    expect(
-      find.textContaining(RegExp('Comfortable|Acceptable|Difficult')),
-      findsWidgets,
-    );
+    expect(find.text('Family contact planner'), findsNothing);
+    expect(find.text('Plan a call'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
