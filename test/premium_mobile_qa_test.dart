@@ -9,6 +9,7 @@ import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
+import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
 import 'package:pour_toujours/features/today/ambient_sky.dart';
 
 void main() {
@@ -139,6 +140,19 @@ void main() {
           themeMode: initial.themeMode,
           theme: PourToujoursTheme.build(initial.theme, Brightness.light),
           darkTheme: PourToujoursTheme.build(initial.theme, Brightness.dark),
+          onGenerateRoute: (settings) {
+            if (settings.name == '/') return null;
+            final args = settings.arguments is DetailRouteArgs
+                ? settings.arguments! as DetailRouteArgs
+                : DetailRouteArgs(title: settings.name ?? 'Details');
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: Text(args.title)),
+                body: Center(child: Text(args.subtitle ?? args.title)),
+              ),
+            );
+          },
           home: PremiumHomeScreenV3(
             viewerName: viewer,
             onSwitchProfile: () {},
@@ -226,15 +240,15 @@ void main() {
     expect(controller.value.theme, PtThemeCollection.cherryCola);
 
     final settingsScroll = find.byType(Scrollable).first;
+    final switchTile = find.widgetWithText(SwitchListTile, 'Reduce motion');
     await tester.scrollUntilVisible(
-      find.text('Reduce motion'),
-      240,
+      switchTile,
+      320,
       scrollable: settingsScroll,
     );
-    await tester.ensureVisible(
-      find.widgetWithText(SwitchListTile, 'Reduce motion'),
-    );
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Reduce motion'));
+    await tester.drag(settingsScroll, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    await tester.tap(switchTile);
     await tester.pump();
 
     expect(controller.value.reducedMotion, isTrue);
@@ -267,8 +281,9 @@ void main() {
     expect(find.text('Karachi'), findsWidgets);
     await tester.tap(find.text('Karachi').first);
     await tester.pumpAndSettle();
+    expect(find.byType(BackButton), findsOneWidget);
     expect(find.text('Karachi'), findsWidgets);
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     final mainScroll = find.byType(Scrollable).first;
