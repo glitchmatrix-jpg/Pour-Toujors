@@ -36,6 +36,7 @@ class DetailRouteArgs {
 
 abstract final class PourToujoursRoutes {
   static String viewerName = 'Hasan';
+  static const _cityIds = {'karachi', 'chiba', 'dublin', 'hattiesburg'};
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     final deepLinkedCity = _cityFromRoute(settings.name);
@@ -80,14 +81,16 @@ abstract final class PourToujoursRoutes {
   static String? _cityFromRoute(String? name) {
     if (name == null) return null;
     final uri = Uri.tryParse(name);
-    final segments = uri?.pathSegments ?? const <String>[];
-    if (segments.length == 2 && segments.first == 'city') {
-      final city = segments.last.toLowerCase();
-      if (const {'karachi', 'chiba', 'dublin', 'hattiesburg'}.contains(city)) {
-        return city;
-      }
+    if (uri == null) return null;
+
+    String? candidate;
+    if (uri.host.toLowerCase() == 'city' && uri.pathSegments.length == 1) {
+      candidate = uri.pathSegments.single.toLowerCase();
+    } else if (uri.pathSegments.length == 2 &&
+        uri.pathSegments.first.toLowerCase() == 'city') {
+      candidate = uri.pathSegments.last.toLowerCase();
     }
-    return null;
+    return candidate != null && _cityIds.contains(candidate) ? candidate : null;
   }
 
   static Widget? _pageFor(String? name, DetailRouteArgs args) {
