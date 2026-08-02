@@ -94,7 +94,7 @@ void main() {
     expect(find.text('Birthdays'), findsOneWidget);
     expect(find.text('Holidays'), findsOneWidget);
     expect(find.text('Family events'), findsOneWidget);
-    expect(find.text('Add event'), findsOneWidget);
+    expect(find.byTooltip('Add event'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
