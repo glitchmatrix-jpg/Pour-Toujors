@@ -6,6 +6,7 @@ class CityWeather {
   const CityWeather({
     required this.temperature,
     required this.feelsLike,
+    required this.windSpeed,
     required this.code,
     required this.isDay,
     required this.high,
@@ -17,6 +18,7 @@ class CityWeather {
 
   final double temperature;
   final double feelsLike;
+  final double windSpeed;
   final int code;
   final bool isDay;
   final double high;
@@ -37,11 +39,12 @@ class CityWeather {
   }
 
   String get practicalLine {
+    if (code >= 95) return 'Storms may disrupt plans';
     if (rainChance >= 65) return 'Rain is likely today';
     if (feelsLike >= 38) return 'Dangerously hot outside';
-    if (code >= 95) return 'Storms may disrupt plans';
     if (temperature <= 2) return 'Very cold outside';
-    return 'No major weather disruption';
+    if (windSpeed >= 35) return 'Strong winds outside';
+    return 'No major disruption expected';
   }
 }
 
@@ -58,13 +61,13 @@ class WeatherService {
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '${point.$1}',
       'longitude': '${point.$2}',
-      'current': 'temperature_2m,apparent_temperature,weather_code,is_day',
+      'current': 'temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m',
       'hourly': 'precipitation_probability',
       'daily': 'temperature_2m_max,temperature_2m_min,sunrise,sunset',
       'forecast_days': '1',
       'timezone': 'auto',
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 8));
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) throw Exception('Weather unavailable');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final current = data['current'] as Map<String, dynamic>;
@@ -74,6 +77,7 @@ class WeatherService {
     return CityWeather(
       temperature: (current['temperature_2m'] as num).toDouble(),
       feelsLike: (current['apparent_temperature'] as num).toDouble(),
+      windSpeed: (current['wind_speed_10m'] as num).toDouble(),
       code: (current['weather_code'] as num).toInt(),
       isDay: (current['is_day'] as num).toInt() == 1,
       high: ((daily['temperature_2m_max'] as List).first as num).toDouble(),
