@@ -88,9 +88,17 @@ jobs:
           grep -F 'android.permission.INTERNET' "$manifest"
           grep -F 'android.permission.POST_NOTIFICATIONS' "$manifest"
           grep -F 'ScheduledNotificationReceiver' "$manifest"
-          grep -F '.PourToujoursSmallWidget' "$manifest"
-          grep -F '.PourToujoursMediumWidget' "$manifest"
-          grep -F '.PourToujoursLargeWidget' "$manifest"
+          for provider in World Cities Karachi Chiba Dublin Hattiesburg; do
+            grep -F ".PourToujours${provider}Widget" "$manifest"
+          done
+          for resource in world cities karachi chiba dublin hattiesburg; do
+            test -s "android/app/src/main/res/xml/pt_widget_${resource}_info.xml"
+          done
+          test -s android/app/src/main/res/layout/pt_widget_world.xml
+          test -s android/app/src/main/res/layout/pt_widget_cities.xml
+          test -s android/app/src/main/res/layout/pt_widget_city.xml
+          grep -F 'pourtoujours://$route' android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
+          grep -F 'Last refreshed in app' android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
           ! grep -F 'ACCESS_FINE_LOCATION' "$manifest"
           ! grep -F 'ACCESS_COARSE_LOCATION' "$manifest"
           grep -F 'version: 1.0.0+10' pubspec.yaml
