@@ -22,15 +22,21 @@ class HolidayService {
     'hattiesburg': 'US',
   };
 
+  /// Test-only deterministic values. Production leaves this null.
+  static Map<String, List<NationalHoliday>>? debugOverrides;
+
   Future<List<NationalHoliday>> fetchUpcoming(
     String cityId, {
     int limit = 3,
   }) async {
-    try {
-      final code = countryCodes[cityId]!;
-      final now = DateTime.now();
-      final results = <NationalHoliday>[];
+    final override = debugOverrides?[cityId];
+    if (override != null) return override.take(limit).toList();
 
+    final code = countryCodes[cityId]!;
+    final now = DateTime.now();
+    final results = <NationalHoliday>[];
+
+    try {
       for (final year in [now.year, now.year + 1]) {
         final response = await http
             .get(
@@ -55,11 +61,11 @@ class HolidayService {
           }
         }
       }
-
-      results.sort((a, b) => a.date.compareTo(b.date));
-      return results.take(limit).toList();
     } catch (_) {
-      return const <NationalHoliday>[];
+      return const [];
     }
+
+    results.sort((a, b) => a.date.compareTo(b.date));
+    return results.take(limit).toList();
   }
 }
