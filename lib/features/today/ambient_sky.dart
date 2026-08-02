@@ -119,13 +119,16 @@ class _AmbientSkyState extends State<AmbientSky>
   @override
   Widget build(BuildContext context) {
     final kind = ambientSkyKindFor(widget.weather, widget.day);
+    final resolvedHeight = widget.height == null
+        ? null
+        : math.max(widget.height!, 250).toDouble();
     return Semantics(
       container: true,
       label: widget.semanticLabel ?? _description(kind),
       child: ClipRRect(
         borderRadius: widget.borderRadius,
         child: SizedBox(
-          height: widget.height,
+          height: resolvedHeight,
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, _) => CustomPaint(
