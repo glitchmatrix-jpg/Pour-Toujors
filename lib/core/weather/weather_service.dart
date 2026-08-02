@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'weather_models.dart';
 
@@ -14,6 +15,13 @@ class WeatherService {
     'chiba': (35.6074, 140.1065),
     'dublin': (53.3498, -6.2603),
     'hattiesburg': (31.3271, -89.2903),
+  };
+
+  static const cityTimezones = <String, String>{
+    'karachi': 'Asia/Karachi',
+    'chiba': 'Asia/Tokyo',
+    'dublin': 'Europe/Dublin',
+    'hattiesburg': 'America/Chicago',
   };
 
   static final Map<String, WeatherBundle> _cache = {};
@@ -123,7 +131,7 @@ class WeatherService {
     final hourlyItems = List<HourlyWeather>.generate(
       hourlyTimes.length,
       (index) => HourlyWeather(
-        time: DateTime.parse(hourlyTimes[index]),
+        time: _cityLocalTime(cityId, hourlyTimes[index]),
         temperature: _numberAt(hourly, 'temperature_2m', index),
         feelsLike: _numberAt(hourly, 'apparent_temperature', index),
         weatherCode: _intAt(hourly, 'weather_code', index),
@@ -138,10 +146,12 @@ class WeatherService {
       ),
     );
 
+    final sunrises = _strings(daily, 'sunrise');
+    final sunsets = _strings(daily, 'sunset');
     final dailyItems = List<DailyWeather>.generate(
       dailyTimes.length,
       (index) => DailyWeather(
-        date: DateTime.parse(dailyTimes[index]),
+        date: _cityLocalTime(cityId, dailyTimes[index]),
         weatherCode: _intAt(daily, 'weather_code', index),
         high: _numberAt(daily, 'temperature_2m_max', index),
         low: _numberAt(daily, 'temperature_2m_min', index),
@@ -150,8 +160,8 @@ class WeatherService {
         precipitation: _numberAt(daily, 'precipitation_sum', index),
         windMaximum: _numberAt(daily, 'wind_speed_10m_max', index),
         gustMaximum: _numberAt(daily, 'wind_gusts_10m_max', index),
-        sunrise: DateTime.parse(_strings(daily, 'sunrise')[index]),
-        sunset: DateTime.parse(_strings(daily, 'sunset')[index]),
+        sunrise: _cityLocalTime(cityId, sunrises[index]),
+        sunset: _cityLocalTime(cityId, sunsets[index]),
         daylightDuration: Duration(
           seconds: _numberAt(daily, 'daylight_duration', index).round(),
         ),
@@ -170,7 +180,7 @@ class WeatherService {
       cityId: cityId,
       updatedAt: DateTime.now(),
       current: CurrentWeather(
-        time: DateTime.parse(current['time'] as String),
+        time: _cityLocalTime(cityId, current['time'] as String),
         temperature: _number(current['temperature_2m']),
         feelsLike: _number(current['apparent_temperature']),
         weatherCode: _integer(current['weather_code']),
@@ -188,6 +198,26 @@ class WeatherService {
       ),
       hourly: hourlyItems,
       daily: dailyItems,
+    );
+  }
+
+  static tz.TZDateTime _cityLocalTime(String cityId, String raw) {
+    final parsed = DateTime.parse(raw);
+    final timezone = cityTimezones[cityId];
+    if (timezone == null) {
+      throw ArgumentError.value(cityId, 'cityId', 'Unknown city timezone');
+    }
+    final location = tz.getLocation(timezone);
+    return tz.TZDateTime(
+      location,
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+      parsed.millisecond,
+      parsed.microsecond,
     );
   }
 
