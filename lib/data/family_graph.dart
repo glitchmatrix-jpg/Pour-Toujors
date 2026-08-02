@@ -179,8 +179,7 @@ class FamilyGraph {
     )) {
       return true;
     }
-    final sharedParents = _parentsOf(first).intersection(_parentsOf(second));
-    return sharedParents.isNotEmpty;
+    return _parentsOf(first).intersection(_parentsOf(second)).isNotEmpty;
   }
 
   bool _isGrandparent(String grandparent, String child) {
@@ -260,6 +259,19 @@ const familyGraph = FamilyGraph(
     'nanu': FamilyGender.male,
   },
   links: [
+    FamilyLink(first: 'Ami', second: 'Nanu', type: FamilyLinkType.spouse),
+    FamilyLink(first: 'Ami', second: 'Talat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'Talat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Ami', second: 'Nighat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'Nighat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Ami', second: 'İmran', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'İmran', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Ami', second: 'Raffat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'Raffat', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Ami', second: 'Yasin', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'Yasin', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Ami', second: 'Asma', type: FamilyLinkType.parent),
+    FamilyLink(first: 'Nanu', second: 'Asma', type: FamilyLinkType.parent),
     FamilyLink(first: 'Talat', second: 'Shahid', type: FamilyLinkType.spouse),
     FamilyLink(first: 'Talat', second: 'Hasan', type: FamilyLinkType.parent),
     FamilyLink(first: 'Talat', second: 'Ramsha', type: FamilyLinkType.parent),
@@ -267,14 +279,6 @@ const familyGraph = FamilyGraph(
     FamilyLink(first: 'Shahid', second: 'Hasan', type: FamilyLinkType.parent),
     FamilyLink(first: 'Shahid', second: 'Ramsha', type: FamilyLinkType.parent),
     FamilyLink(first: 'Shahid', second: 'Salman', type: FamilyLinkType.parent),
-    FamilyLink(first: 'Ami', second: 'Nanu', type: FamilyLinkType.spouse),
-    FamilyLink(first: 'Ami', second: 'Talat', type: FamilyLinkType.parent),
-    FamilyLink(first: 'Nanu', second: 'Talat', type: FamilyLinkType.parent),
-    FamilyLink(first: 'Talat', second: 'Nighat', type: FamilyLinkType.sibling),
-    FamilyLink(first: 'Talat', second: 'İmran', type: FamilyLinkType.sibling),
-    FamilyLink(first: 'Talat', second: 'Raffat', type: FamilyLinkType.sibling),
-    FamilyLink(first: 'Talat', second: 'Yasin', type: FamilyLinkType.sibling),
-    FamilyLink(first: 'Talat', second: 'Asma', type: FamilyLinkType.sibling),
     FamilyLink(first: 'Yasin', second: 'Sarwat', type: FamilyLinkType.spouse),
     FamilyLink(first: 'Yasin', second: 'Affan', type: FamilyLinkType.parent),
     FamilyLink(first: 'Sarwat', second: 'Affan', type: FamilyLinkType.parent),
