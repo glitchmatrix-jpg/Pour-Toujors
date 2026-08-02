@@ -11,9 +11,7 @@ import 'package:pour_toujours/features/onboarding/identity_setup_screen.dart';
 void main() {
   setUpAll(tz.initializeTimeZones);
 
-  final fixtureDate = DateTime(2026, 8, 2);
-
-  CityWeather weather({
+  CityWeather fixture({
     required double temperature,
     required double feelsLike,
     required double wind,
@@ -41,7 +39,7 @@ void main() {
 
   setUp(() {
     WeatherService.debugOverrides = {
-      'karachi': weather(
+      'karachi': fixture(
         temperature: 34,
         feelsLike: 42,
         wind: 19,
@@ -51,7 +49,7 @@ void main() {
         low: 29,
         rain: 38,
       ),
-      'chiba': weather(
+      'chiba': fixture(
         temperature: 27,
         feelsLike: 30,
         wind: 11,
@@ -61,7 +59,7 @@ void main() {
         low: 24,
         rain: 78,
       ),
-      'dublin': weather(
+      'dublin': fixture(
         temperature: 17,
         feelsLike: 16,
         wind: 37,
@@ -71,7 +69,7 @@ void main() {
         low: 12,
         rain: 45,
       ),
-      'hattiesburg': weather(
+      'hattiesburg': fixture(
         temperature: 29,
         feelsLike: 35,
         wind: 14,
@@ -83,31 +81,32 @@ void main() {
       ),
     };
 
+    final base = DateTime(2026, 8, 2);
     HolidayService.debugOverrides = {
       'karachi': [
         NationalHoliday(
-          date: fixtureDate.add(const Duration(days: 12)),
+          date: base.add(const Duration(days: 12)),
           name: 'Independence Day',
           countryCode: 'PK',
         ),
       ],
       'chiba': [
         NationalHoliday(
-          date: fixtureDate.add(const Duration(days: 9)),
+          date: base.add(const Duration(days: 9)),
           name: 'Mountain Day',
           countryCode: 'JP',
         ),
       ],
       'dublin': [
         NationalHoliday(
-          date: fixtureDate.add(const Duration(days: 85)),
+          date: base.add(const Duration(days: 85)),
           name: 'October Bank Holiday',
           countryCode: 'IE',
         ),
       ],
       'hattiesburg': [
         NationalHoliday(
-          date: fixtureDate.add(const Duration(days: 35)),
+          date: base.add(const Duration(days: 35)),
           name: 'Labor Day',
           countryCode: 'US',
         ),
@@ -120,16 +119,19 @@ void main() {
     HolidayService.debugOverrides = null;
   });
 
-  Future<void> pumpHomeAtSize(
-    WidgetTester tester,
-    Size size, {
-    String viewer = 'Hasan',
-  }) async {
+  Future<void> setPhone(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+  }
 
+  Future<void> pumpHome(
+    WidgetTester tester,
+    Size size, {
+    String viewer = 'Hasan',
+  }) async {
+    await setPhone(tester, size);
     await tester.pumpWidget(
       MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -143,15 +145,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> pumpOnboardingAtSize(
-    WidgetTester tester,
-    Size size,
-  ) async {
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
+  Future<void> pumpOnboarding(WidgetTester tester, Size size) async {
+    await setPhone(tester, size);
     await tester.pumpWidget(
       MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -162,59 +157,57 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  void expectNoFrameworkException(WidgetTester tester) {
-    final exception = tester.takeException();
+  void expectClean(WidgetTester tester) {
     expect(
-      exception,
+      tester.takeException(),
       isNull,
       reason: 'The screen produced a Flutter layout or paint exception.',
     );
   }
 
-  for (final size in <Size>[
-    const Size(360, 640),
-    const Size(390, 844),
-    const Size(412, 915),
+  for (final size in const <Size>[
+    Size(360, 640),
+    Size(390, 844),
+    Size(412, 915),
   ]) {
     testWidgets(
-      'Onboarding renders without overflow at '
-      '${size.width.toInt()}x${size.height.toInt()}',
+      'Onboarding is clean at ${size.width.toInt()}x${size.height.toInt()}',
       (tester) async {
-        await pumpOnboardingAtSize(tester, size);
-
+        await pumpOnboarding(tester, size);
         expect(find.text('Who are you?'), findsOneWidget);
         expect(find.text('Pour Toujours'), findsOneWidget);
         expect(find.byType(SvgPicture), findsOneWidget);
         expect(find.textContaining('Continue as'), findsOneWidget);
-        expectNoFrameworkException(tester);
+        expectClean(tester);
       },
     );
 
     testWidgets(
-      'Today with populated weather renders and scrolls without overflow at '
-      '${size.width.toInt()}x${size.height.toInt()}',
+      'Populated Today is clean at ${size.width.toInt()}x${size.height.toInt()}',
       (tester) async {
-        await pumpHomeAtSize(tester, size);
-
+        await pumpHome(tester, size);
         expect(find.textContaining('Good '), findsOneWidget);
         expect(find.text('YOUR FAMILY WORLD'), findsOneWidget);
         expect(find.text('Family now'), findsOneWidget);
+        expectClean(tester);
+
+        await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+        await tester.pumpAndSettle();
         expect(find.text('34°'), findsOneWidget);
         expect(find.text('Feels 42°'), findsOneWidget);
         expect(find.text('19 km/h'), findsOneWidget);
-        expectNoFrameworkException(tester);
+        expectClean(tester);
 
         await tester.drag(find.byType(ListView).first, const Offset(0, -1800));
         await tester.pumpAndSettle();
         expect(find.text('Next birthdays'), findsOneWidget);
-        expectNoFrameworkException(tester);
+        expectClean(tester);
       },
     );
   }
 
-  testWidgets('Offline weather is honest and never displays fake metrics',
-      (tester) async {
-    final offline = weather(
+  testWidgets('Offline weather is honest and omits fake metrics', (tester) async {
+    final offline = fixture(
       temperature: 0,
       feelsLike: 0,
       wind: 0,
@@ -230,56 +223,50 @@ void main() {
         city: offline,
     };
 
-    await pumpHomeAtSize(tester, const Size(390, 844));
-
+    await pumpHome(tester, const Size(390, 844));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Weather unavailable'), findsWidgets);
     expect(find.text('Feels 0°'), findsNothing);
     expect(find.text('0 km/h'), findsNothing);
-    expectNoFrameworkException(tester);
+    expectClean(tester);
   });
 
-  testWidgets('People page uses viewer-relative relationships', (tester) async {
-    await pumpHomeAtSize(tester, const Size(390, 844), viewer: 'Talat');
-
+  testWidgets('Relationships are relative to the selected viewer', (tester) async {
+    await pumpHome(tester, const Size(390, 844), viewer: 'Talat');
     await tester.tap(find.text('People').last);
     await tester.pumpAndSettle();
-
     expect(find.text('Son'), findsWidgets);
     expect(find.text('Daughter'), findsOneWidget);
-    expectNoFrameworkException(tester);
+    expectClean(tester);
   });
 
-  testWidgets('Calendar shows birthdays and deterministic national holidays',
-      (tester) async {
-    await pumpHomeAtSize(tester, const Size(390, 844));
-
+  testWidgets('Calendar renders birthdays and holidays', (tester) async {
+    await pumpHome(tester, const Size(390, 844));
     await tester.tap(find.text('Calendar').last);
     await tester.pumpAndSettle();
-
     expect(find.text('Birthdays'), findsOneWidget);
     expect(find.text('National holidays'), findsOneWidget);
     expect(find.text('Independence Day'), findsOneWidget);
     expect(find.text('Mountain Day'), findsOneWidget);
+    expectClean(tester);
 
-    final horizontalLists = find.byWidgetPredicate(
+    final horizontal = find.byWidgetPredicate(
       (widget) =>
           widget is ListView && widget.scrollDirection == Axis.horizontal,
     );
-    expect(horizontalLists, findsOneWidget);
-    await tester.drag(horizontalLists, const Offset(-600, 0));
+    expect(horizontal, findsOneWidget);
+    await tester.drag(horizontal, const Offset(-600, 0));
     await tester.pumpAndSettle();
-    expectNoFrameworkException(tester);
+    expectClean(tester);
   });
 
-  testWidgets('Settings remains usable at the smallest supported phone size',
-      (tester) async {
-    await pumpHomeAtSize(tester, const Size(360, 640));
-
+  testWidgets('Settings works on the smallest supported phone', (tester) async {
+    await pumpHome(tester, const Size(360, 640));
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
-
     expect(find.text('Switch profile'), findsOneWidget);
     expect(find.textContaining('Using Pour Toujours as Hasan'), findsOneWidget);
-    expectNoFrameworkException(tester);
+    expectClean(tester);
   });
 }
