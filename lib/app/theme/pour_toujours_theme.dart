@@ -156,7 +156,7 @@ abstract final class PourToujoursTheme {
         ),
         titleLarge: TextStyle(
           fontSize: 20,
-          fontWeight: FontWeight.w750,
+          fontWeight: FontWeight.w700,
           color: palette.text,
         ),
         titleMedium: TextStyle(
@@ -185,7 +185,7 @@ abstract final class PourToujoursTheme {
         backgroundColor: palette.elevated,
         indicatorColor: palette.accent.withValues(alpha: dark ? .28 : .14),
         labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(color: palette.text, fontWeight: FontWeight.w650),
+          TextStyle(color: palette.text, fontWeight: FontWeight.w600),
         ),
       ),
       dividerTheme: DividerThemeData(color: palette.tokens.outline),
