@@ -37,7 +37,7 @@ class LivingTodayScreen extends StatefulWidget {
 }
 
 class _LivingTodayScreenState extends State<LivingTodayScreen> {
-  late Future<Map<String, WeatherBundle?>> _allWeather;
+  late Future<Map<String, WeatherBundle?>> _weather;
   late Future<List<FamilyWeatherAlert>> _officialAlerts;
   late Set<String> _selectedPeople;
 
@@ -45,17 +45,17 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
   void initState() {
     super.initState();
     _selectedPeople = familyMembers.map((member) => member.name).toSet();
-    _bindFutures();
+    _bindData();
   }
 
   @override
   void didUpdateWidget(covariant LivingTodayScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.weatherFutures != widget.weatherFutures) _bindFutures();
+    if (oldWidget.weatherFutures != widget.weatherFutures) _bindData();
   }
 
-  void _bindFutures() {
-    _allWeather = Future.wait(
+  void _bindData() {
+    _weather = Future.wait(
       cities.map((city) async {
         try {
           return MapEntry<String, WeatherBundle?>(
@@ -66,31 +66,32 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
           return MapEntry<String, WeatherBundle?>(city.id, null);
         }
       }),
-    ).then((entries) => Map.fromEntries(entries));
+    ).then(Map.fromEntries);
     _officialAlerts = widget.alerts.fetchOfficialForCity('hattiesburg');
   }
 
   Future<void> _refresh() async {
     await widget.onRefresh();
     if (!mounted) return;
-    setState(_bindFutures);
+    setState(_bindData);
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = AppSettingsScope.of(context).value;
+    final awake = widget.snapshots.values
+        .where((snapshot) => snapshot.kind != AvailabilityKind.asleep)
+        .length;
+    final free = widget.snapshots.values
+        .where((snapshot) => snapshot.kind == AvailabilityKind.likelyFree)
+        .length;
+
     return RefreshIndicator(
       onRefresh: _refresh,
       child: FutureBuilder<Map<String, WeatherBundle?>>(
-        future: _allWeather,
-        builder: (context, weatherSnapshot) {
-          final weather = weatherSnapshot.data ?? const <String, WeatherBundle?>{};
-          final awake = widget.snapshots.values
-              .where((item) => item.kind != AvailabilityKind.asleep)
-              .length;
-          final free = widget.snapshots.values
-              .where((item) => item.kind == AvailabilityKind.likelyFree)
-              .length;
+        future: _weather,
+        builder: (context, snapshot) {
+          final weather = snapshot.data ?? const <String, WeatherBundle?>{};
           final daylight = weather.values
               .whereType<WeatherBundle>()
               .where((bundle) => bundle.current.isDay)
@@ -104,18 +105,13 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 112),
                 sliver: SliverList.list(
                   children: [
-                    _LivingHeader(
-                      viewer: widget.viewer,
-                      awake: awake,
-                      free: free,
-                    ),
+                    _Header(viewer: widget.viewer, awake: awake, free: free),
                     const SizedBox(height: 18),
-                    if (weatherSnapshot.connectionState ==
-                            ConnectionState.waiting &&
+                    if (snapshot.connectionState == ConnectionState.waiting &&
                         weather.isEmpty)
-                      const PtLoadingSkeleton(height: 360)
+                      const PtLoadingSkeleton(height: 374)
                     else
-                      _LivingFamilyWorld(
+                      _FamilyWorld(
                         viewer: widget.viewer,
                         snapshots: widget.snapshots,
                         weather: weather,
@@ -125,19 +121,16 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                     const SizedBox(height: 18),
                     FutureBuilder<List<FamilyWeatherAlert>>(
                       future: _officialAlerts,
-                      builder: (context, alertSnapshot) {
-                        final official = alertSnapshot.data ?? const [];
-                        return _FamilyPulse(
-                          viewer: widget.viewer,
-                          awake: awake,
-                          free: free,
-                          daylightCities: daylight,
-                          weather: weather,
-                          officialAlerts: official,
-                          timezone: widget.timezone,
-                          onPlanner: _openPlanner,
-                        );
-                      },
+                      builder: (context, alerts) => _FamilyPulse(
+                        viewer: widget.viewer,
+                        awake: awake,
+                        free: free,
+                        daylightCities: daylight,
+                        weather: weather,
+                        officialAlerts: alerts.data ?? const [],
+                        timezone: widget.timezone,
+                        onPlanner: _openPlanner,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     PtSectionHeader(
@@ -151,12 +144,12 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                     _SharedTimeRibbon(
                       viewer: widget.viewer,
                       selectedPeople: _selectedPeople,
-                      onTapOverlap: _openPlanner,
+                      onOverlapTap: _openPlanner,
                     ),
                     const SizedBox(height: 24),
                     const PtSectionHeader('City conditions'),
                     const SizedBox(height: 10),
-                    _CityConditionGrid(
+                    _CityGrid(
                       viewer: widget.viewer,
                       snapshots: widget.snapshots,
                       weather: weather,
@@ -173,7 +166,7 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _ConnectionWindowCard(
+                    _ConnectionPreview(
                       viewer: widget.viewer,
                       selectedPeople: _selectedPeople,
                       weather: weather,
@@ -184,11 +177,11 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                     const SizedBox(height: 10),
                     FutureBuilder<List<FamilyWeatherAlert>>(
                       future: _officialAlerts,
-                      builder: (context, snapshot) => _ImportantToday(
+                      builder: (context, alerts) => _ImportantToday(
                         viewer: widget.viewer,
                         weather: weather,
-                        officialAlerts: snapshot.data ?? const [],
-                        alerts: widget.alerts,
+                        officialAlerts: alerts.data ?? const [],
+                        alertService: widget.alerts,
                         timezone: widget.timezone,
                       ),
                     ),
@@ -225,9 +218,9 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: StatefulBuilder(
-          builder: (context, setSheetState) => Padding(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -239,10 +232,10 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'The recommendation uses routines only. It never claims someone is currently available.',
+                  'Recommendations use routines only and never claim live availability.',
                   style: TextStyle(color: context.pt.secondaryText),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Flexible(
                   child: ListView(
                     shrinkWrap: true,
@@ -251,13 +244,9 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
                         CheckboxListTile(
                           value: draft.contains(member.name),
                           title: Text(member.name),
-                          subtitle: Text(
-                            cities
-                                .firstWhere((city) => city.id == member.cityId)
-                                .name,
-                          ),
-                          onChanged: (value) => setSheetState(() {
-                            if (value ?? false) {
+                          subtitle: Text(_city(member.cityId).name),
+                          onChanged: (selected) => setSheetState(() {
+                            if (selected ?? false) {
                               draft.add(member.name);
                             } else if (draft.length > 1) {
                               draft.remove(member.name);
@@ -287,12 +276,8 @@ class _LivingTodayScreenState extends State<LivingTodayScreen> {
   }
 }
 
-class _LivingHeader extends StatelessWidget {
-  const _LivingHeader({
-    required this.viewer,
-    required this.awake,
-    required this.free,
-  });
+class _Header extends StatelessWidget {
+  const _Header({required this.viewer, required this.awake, required this.free});
 
   final FamilyMember viewer;
   final int awake;
@@ -345,8 +330,8 @@ class _LivingHeader extends StatelessWidget {
   }
 }
 
-class _LivingFamilyWorld extends StatelessWidget {
-  const _LivingFamilyWorld({
+class _FamilyWorld extends StatelessWidget {
+  const _FamilyWorld({
     required this.viewer,
     required this.snapshots,
     required this.weather,
@@ -363,20 +348,18 @@ class _LivingFamilyWorld extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = weather.values.whereType<WeatherBundle>().firstOrNull;
-    final current = fallback?.current ?? _neutralWeather();
-    final day = fallback?.daily.firstOrNull;
     return AmbientSky(
-      weather: current,
-      day: day,
+      weather: fallback?.current ?? _neutralWeather(),
+      day: fallback?.daily.firstOrNull,
       height: 374,
       semanticLabel:
-          'Interactive family world showing Karachi, Chiba, Dublin, and Hattiesburg. City positions are illustrative and do not represent live location.',
+          'Interactive family world for Karachi, Chiba, Dublin, and Hattiesburg. Positions are illustrative and never show live location.',
       child: Stack(
         children: [
           const Positioned(
             left: 20,
-            top: 18,
             right: 20,
+            top: 18,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -403,23 +386,21 @@ class _LivingFamilyWorld extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            top: 76,
+            top: 74,
             child: CustomPaint(
-              painter: _WorldConnectionPainter(
+              painter: _ConnectionPainter(
                 color: Colors.white.withValues(alpha: .24),
               ),
             ),
           ),
-          for (final placement in _cityPlacements)
+          for (final placement in _placements)
             Align(
               alignment: placement.alignment,
               child: Padding(
                 padding: const EdgeInsets.only(top: 58),
-                child: _WorldCityNode(
-                  city: cities.firstWhere((city) => city.id == placement.cityId),
-                  snapshot: snapshots[familyMembers
-                      .firstWhere((member) => member.cityId == placement.cityId)
-                      .name]!,
+                child: _CityNode(
+                  city: _city(placement.cityId),
+                  snapshot: snapshots[_members(placement.cityId).first.name]!,
                   bundle: weather[placement.cityId],
                   viewerCityId: viewer.cityId,
                   settings: settings,
@@ -431,29 +412,23 @@ class _LivingFamilyWorld extends StatelessWidget {
             left: 18,
             right: 18,
             bottom: 14,
-            child: Semantics(
-              label:
-                  'Routine estimates only. The map does not use GPS, background location, or phone activity.',
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: .2),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.shield_outlined,
-                        size: 15, color: Colors.white70),
-                    SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        'Illustrative world · routines, local time, and weather — never live location',
-                        style: TextStyle(color: Colors.white70, fontSize: 10),
-                      ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 15, color: Colors.white70),
+                  SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Local time, weather, and routines — never GPS or live phone activity',
+                      style: TextStyle(color: Colors.white70, fontSize: 10),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -461,28 +436,10 @@ class _LivingFamilyWorld extends StatelessWidget {
       ),
     );
   }
-
-  CurrentWeather _neutralWeather() => CurrentWeather(
-        time: DateTime.now(),
-        temperature: 0,
-        feelsLike: 0,
-        weatherCode: 2,
-        isDay: true,
-        precipitation: 0,
-        rainChance: 0,
-        windSpeed: 0,
-        windGusts: 0,
-        windDirection: 0,
-        humidity: 0,
-        visibility: 10000,
-        uvIndex: 0,
-        cloudCover: 40,
-        surfacePressure: 1013,
-      );
 }
 
-class _WorldCityNode extends StatelessWidget {
-  const _WorldCityNode({
+class _CityNode extends StatelessWidget {
+  const _CityNode({
     required this.city,
     required this.snapshot,
     required this.bundle,
@@ -500,88 +457,56 @@ class _WorldCityNode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final members = familyMembers.where((member) => member.cityId == city.id);
+    final members = _members(city.id);
     final free = members
         .where(
-          (member) => snapshotForMember(member).kind ==
+          (member) => evaluateAvailability(member: member, city: city).kind ==
               AvailabilityKind.likelyFree,
         )
         .length;
-    final intelligence = timezone.snapshot(
-      cityId: city.id,
-      viewerCityId: viewerCityId,
-    );
-    final clock = settings.clockFormat == ClockFormat.twentyFourHour
-        ? DateFormat('HH:mm')
-        : DateFormat('h:mm a');
+    final offset = timezone
+        .snapshot(cityId: city.id, viewerCityId: viewerCityId)
+        .viewerDifference
+        .inHours;
     final isDay = bundle?.current.isDay ??
         (snapshot.localTime.hour >= 6 && snapshot.localTime.hour < 18);
+    final clock = DateFormat(
+      settings.clockFormat == ClockFormat.twentyFourHour ? 'HH:mm' : 'h:mm a',
+    );
     return Semantics(
       button: true,
       label:
-          '${city.name}, ${clock.format(snapshot.localTime)}, ${isDay ? 'daylight' : 'night'}, ${members.length} family members, $free usually free. ${bundle?.condition ?? 'Weather unavailable'}.',
+          '${city.name}, ${clock.format(snapshot.localTime)}, ${isDay ? 'daylight' : 'night'}, ${members.length} family members, $free usually free, ${bundle?.condition ?? 'weather unavailable'}.',
       child: InkResponse(
-        onTap: () => Navigator.pushNamed(
-          context,
-          PourToujoursRouteNames.city,
-          arguments: DetailRouteArgs(
-            title: city.name,
-            subtitle:
-                '${members.length} family members · ${bundle?.condition ?? 'Weather unavailable'}',
-            payload: city.id,
-          ),
-        ),
         radius: 62,
+        onTap: () => _openCity(context, city, bundle),
         child: SizedBox(
           width: 116,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 58,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: .14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: .52),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isDay
-                                  ? const Color(0xFFFFD484)
-                                  : context.pt.globeAccent)
-                              .withValues(alpha: .34),
-                          blurRadius: free > 0 ? 24 : 12,
-                          spreadRadius: free > 0 ? 3 : 0,
-                        ),
-                      ],
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .14),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: .52)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isDay
+                              ? const Color(0xFFFFD484)
+                              : context.pt.globeAccent)
+                          .withValues(alpha: free > 0 ? .36 : .18),
+                      blurRadius: free > 0 ? 24 : 12,
+                      spreadRadius: free > 0 ? 3 : 0,
                     ),
-                    child: Icon(
-                      _weatherIcon(bundle?.current.weatherCode, isDay),
-                      color: Colors.white,
-                      size: 25,
-                    ),
-                  ),
-                  Positioned(
-                    right: 4,
-                    top: 1,
-                    child: Container(
-                      width: 13,
-                      height: 13,
-                      decoration: BoxDecoration(
-                        color: isDay
-                            ? const Color(0xFFFFD36C)
-                            : const Color(0xFFBCC8FF),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Icon(
+                  _weatherIcon(bundle?.current.weatherCode, isDay),
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 7),
               Text(
@@ -596,9 +521,9 @@ class _WorldCityNode extends StatelessWidget {
                 style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
               Text(
-                '$free free · ${intelligence.viewerDifference.inHours == 0 ? 'same time' : '${intelligence.viewerDifference.inHours.abs()}h ${intelligence.viewerDifference.isNegative ? 'behind' : 'ahead'}'}',
-                textAlign: TextAlign.center,
+                '$free free · ${_offsetLabel(offset)}',
                 maxLines: 2,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white60, fontSize: 9),
               ),
             ],
@@ -607,16 +532,10 @@ class _WorldCityNode extends StatelessWidget {
       ),
     );
   }
-
-  AvailabilitySnapshot snapshotForMember(FamilyMember member) =>
-      evaluateAvailability(
-        member: member,
-        city: cities.firstWhere((city) => city.id == member.cityId),
-      );
 }
 
-class _WorldConnectionPainter extends CustomPainter {
-  const _WorldConnectionPainter({required this.color});
+class _ConnectionPainter extends CustomPainter {
+  const _ConnectionPainter({required this.color});
   final Color color;
 
   @override
@@ -626,18 +545,18 @@ class _WorldConnectionPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     final points = [
-      Offset(size.width * .22, size.height * .32),
-      Offset(size.width * .76, size.height * .24),
-      Offset(size.width * .28, size.height * .69),
-      Offset(size.width * .73, size.height * .72),
+      Offset(size.width * .22, size.height * .31),
+      Offset(size.width * .76, size.height * .23),
+      Offset(size.width * .28, size.height * .68),
+      Offset(size.width * .73, size.height * .71),
     ];
-    for (var i = 0; i < points.length; i++) {
-      final next = points[(i + 1) % points.length];
+    for (var index = 0; index < points.length; index++) {
+      final next = points[(index + 1) % points.length];
       final path = Path()
-        ..moveTo(points[i].dx, points[i].dy)
+        ..moveTo(points[index].dx, points[index].dy)
         ..quadraticBezierTo(
           size.width * .5,
-          size.height * (.4 + (i.isEven ? -.15 : .15)),
+          size.height * (.4 + (index.isEven ? -.15 : .15)),
           next.dx,
           next.dy,
         );
@@ -646,7 +565,7 @@ class _WorldConnectionPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WorldConnectionPainter oldDelegate) =>
+  bool shouldRepaint(covariant _ConnectionPainter oldDelegate) =>
       oldDelegate.color != color;
 }
 
@@ -674,64 +593,59 @@ class _FamilyPulse extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final birthday = _nextBirthday();
-    final clockChange = cities
+    final changes = cities
         .map(
-          (city) => MapEntry(
+          (city) => (
             city,
-            timezone.snapshot(
-              cityId: city.id,
-              viewerCityId: viewer.cityId,
-            ).nextChange,
+            timezone.snapshot(cityId: city.id, viewerCityId: viewer.cityId).nextChange,
           ),
         )
-        .where((entry) => entry.value != null)
+        .where((item) => item.$2 != null)
         .toList()
-      ..sort((a, b) => a.value!.at.compareTo(b.value!.at));
-    final alertCount = officialAlerts.length +
-        weather.entries.fold<int>(
-          0,
-          (total, entry) => total +
-              (entry.value == null
-                  ? 0
-                  : WeatherAlertService().derive(entry.key, entry.value!).length),
-        );
+      ..sort((a, b) => a.$2!.at.compareTo(b.$2!.at));
+    final derivedCount = weather.entries.fold<int>(
+      0,
+      (count, entry) => count +
+          (entry.value == null
+              ? 0
+              : WeatherAlertService().derive(entry.key, entry.value!).length),
+    );
     final items = [
-      _PulseItem(Icons.wb_sunny_outlined, '$awake awake', 'Routine estimate',
-          () {}),
-      _PulseItem(Icons.call_outlined, '$free usually free', 'Strong windows',
-          onPlanner),
-      _PulseItem(Icons.light_mode_outlined, '$daylightCities in daylight',
-          'Across four cities', () {}),
-      _PulseItem(Icons.cake_outlined, birthday.$1, birthday.$2, () {
+      _Pulse(Icons.wb_sunny_outlined, '$awake awake', 'Routine estimate', () {}),
+      _Pulse(Icons.call_outlined, '$free usually free', 'Strong windows', onPlanner),
+      _Pulse(
+        Icons.light_mode_outlined,
+        '$daylightCities in daylight',
+        'Across four cities',
+        () {},
+      ),
+      _Pulse(Icons.cake_outlined, birthday.$1, birthday.$2, () {
         Navigator.pushNamed(
           context,
           PourToujoursRouteNames.birthday,
           arguments: DetailRouteArgs(title: birthday.$1, subtitle: birthday.$2),
         );
       }),
-      _PulseItem(
+      _Pulse(
         Icons.warning_amber_rounded,
-        alertCount == 0 ? 'No major alerts' : '$alertCount advisories',
+        officialAlerts.length + derivedCount == 0
+            ? 'No major alerts'
+            : '${officialAlerts.length + derivedCount} advisories',
         officialAlerts.isEmpty ? 'Forecast guidance' : 'Includes official alert',
-        () {
-          Navigator.pushNamed(
-            context,
-            PourToujoursRouteNames.alert,
-            arguments: DetailRouteArgs(
-              title: 'Family weather advisories',
-              subtitle: '$alertCount currently relevant items',
-            ),
-          );
-        },
+        () => Navigator.pushNamed(
+          context,
+          PourToujoursRouteNames.alert,
+          arguments: const DetailRouteArgs(title: 'Family weather advisories'),
+        ),
       ),
-      _PulseItem(
+      _Pulse(
         Icons.more_time_rounded,
-        clockChange.isEmpty
+        changes.isEmpty
             ? 'No clock change soon'
-            : '${clockChange.first.key.name} changes clocks',
-        clockChange.isEmpty
+            : '${changes.first.$1.name} changes clocks',
+        changes.isEmpty
             ? 'Karachi and Chiba stay fixed'
-            : DateFormat('d MMM').format(clockChange.first.value!.at),
+            : DateFormat('d MMM').format(changes.first.$2!.at),
         () {},
       ),
     ];
@@ -812,23 +726,10 @@ class _FamilyPulse extends StatelessWidget {
       ),
     );
   }
-
-  (String, String) _nextBirthday() {
-    final now = DateTime.now();
-    final values = [...familyBirthdays]
-      ..sort(
-        (a, b) =>
-            a.nextOccurrence(now).compareTo(b.nextOccurrence(now)),
-      );
-    final next = values.first;
-    final date = next.nextOccurrence(now);
-    final days = date.difference(DateTime(now.year, now.month, now.day)).inDays;
-    return ('${next.name}’s birthday', days == 0 ? 'Today' : 'In $days days');
-  }
 }
 
-class _PulseItem {
-  const _PulseItem(this.icon, this.title, this.subtitle, this.onTap);
+class _Pulse {
+  const _Pulse(this.icon, this.title, this.subtitle, this.onTap);
   final IconData icon;
   final String title;
   final String subtitle;
@@ -839,12 +740,12 @@ class _SharedTimeRibbon extends StatelessWidget {
   const _SharedTimeRibbon({
     required this.viewer,
     required this.selectedPeople,
-    required this.onTapOverlap,
+    required this.onOverlapTap,
   });
 
   final FamilyMember viewer;
   final Set<String> selectedPeople;
-  final VoidCallback onTapOverlap;
+  final VoidCallback onOverlapTap;
 
   @override
   Widget build(BuildContext context) {
@@ -852,11 +753,7 @@ class _SharedTimeRibbon extends StatelessWidget {
     const hourWidth = 46.0;
     final rows = <(String, List<FamilyMember>)>[
       (viewer.name, [viewer]),
-      for (final city in cities)
-        (
-          city.name,
-          familyMembers.where((member) => member.cityId == city.id).toList(),
-        ),
+      for (final city in cities) (city.name, _members(city.id)),
     ];
     return Container(
       decoration: BoxDecoration(
@@ -878,13 +775,7 @@ class _SharedTimeRibbon extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                Text(
-                  'Scroll →',
-                  style: TextStyle(
-                    color: context.pt.secondaryText,
-                    fontSize: 11,
-                  ),
-                ),
+                Text('Scroll →', style: TextStyle(color: context.pt.secondaryText, fontSize: 11)),
               ],
             ),
           ),
@@ -908,10 +799,7 @@ class _SharedTimeRibbon extends StatelessWidget {
                                 row.$1,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
@@ -934,13 +822,8 @@ class _SharedTimeRibbon extends StatelessWidget {
                                   SizedBox(
                                     width: hourWidth,
                                     child: Text(
-                                      DateFormat('ha').format(
-                                        start.add(Duration(hours: hour)),
-                                      ),
-                                      style: TextStyle(
-                                        color: context.pt.secondaryText,
-                                        fontSize: 9,
-                                      ),
+                                      DateFormat('ha').format(start.add(Duration(hours: hour))),
+                                      style: TextStyle(color: context.pt.secondaryText, fontSize: 9),
                                     ),
                                   ),
                               ],
@@ -957,7 +840,7 @@ class _SharedTimeRibbon extends StatelessWidget {
                                       instant: start.add(Duration(hours: hour)),
                                       members: row.$2,
                                       selectedPeople: selectedPeople,
-                                      onTap: onTapOverlap,
+                                      onTap: onOverlapTap,
                                     ),
                                 ],
                               ),
@@ -973,7 +856,7 @@ class _SharedTimeRibbon extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Text(
-              'Bands are cautious routine estimates, not live activity. Bright borders mark stronger overlap for the selected people.',
+              'Bands are cautious routine estimates, not live activity. Bright borders mark stronger overlap.',
               style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
             ),
           ),
@@ -1000,48 +883,49 @@ class _TimelineCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final snapshots = [
-      for (final member in members)
-        evaluateAvailability(
-          member: member,
-          city: cities.firstWhere((city) => city.id == member.cityId),
-          now: instant,
-        ),
-    ];
-    final kind = _dominantKind(snapshots.map((item) => item.kind));
-    final selected = familyMembers
+    final kinds = members.map(
+      (member) => evaluateAvailability(
+        member: member,
+        city: _city(member.cityId),
+        now: instant,
+      ).kind,
+    );
+    final selectedKinds = familyMembers
         .where((member) => selectedPeople.contains(member.name))
         .map(
           (member) => evaluateAvailability(
             member: member,
-            city: cities.firstWhere((city) => city.id == member.cityId),
+            city: _city(member.cityId),
             now: instant,
           ).kind,
-        );
-    final score = selected.isEmpty
+        )
+        .toList();
+    final kind = _dominantKind(kinds);
+    final score = selectedKinds.isEmpty
         ? 0.0
-        : selected.map(_availabilityScore).reduce((a, b) => a + b) /
-            selected.length;
-    final color = _timelineColor(context, kind);
+        : selectedKinds.map(_availabilityScore).reduce((a, b) => a + b) /
+            selectedKinds.length;
     return Semantics(
       button: score >= .6,
       label:
-          '${DateFormat('EEEE h a').format(instant.toLocal())}: ${_kindLabel(kind)}. Family overlap score ${(score * 100).round()} percent.',
+          '${DateFormat('EEEE h a').format(instant.toLocal())}: ${_kindLabel(kind)}. Overlap score ${(score * 100).round()} percent.',
       child: GestureDetector(
         onTap: score >= .6 ? onTap : null,
-        child: Container(
+        child: SizedBox(
           width: width,
-          margin: const EdgeInsets.fromLTRB(1, 3, 1, 3),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: .72),
-            borderRadius: BorderRadius.circular(7),
-            border: score >= .72
-                ? Border.all(color: context.pt.accent, width: 2)
-                : score >= .55
-                    ? Border.all(
-                        color: context.pt.accent.withValues(alpha: .5),
-                      )
-                    : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 1),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: _timelineColor(context, kind).withValues(alpha: .72),
+                borderRadius: BorderRadius.circular(7),
+                border: score >= .72
+                    ? Border.all(color: context.pt.accent, width: 2)
+                    : score >= .55
+                        ? Border.all(color: context.pt.accent.withValues(alpha: .5))
+                        : null,
+              ),
+            ),
           ),
         ),
       ),
@@ -1049,8 +933,8 @@ class _TimelineCell extends StatelessWidget {
   }
 }
 
-class _CityConditionGrid extends StatelessWidget {
-  const _CityConditionGrid({
+class _CityGrid extends StatelessWidget {
+  const _CityGrid({
     required this.viewer,
     required this.snapshots,
     required this.weather,
@@ -1071,17 +955,16 @@ class _CityConditionGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 700 ? 4 : 2;
-        final spacing = 10.0;
-        final width =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        const gap = 10.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
+          spacing: gap,
+          runSpacing: gap,
           children: [
             for (final city in cities)
               SizedBox(
                 width: width,
-                child: _CompactCityCard(
+                child: _CityCard(
                   city: city,
                   viewer: viewer,
                   snapshots: snapshots,
@@ -1098,8 +981,8 @@ class _CityConditionGrid extends StatelessWidget {
   }
 }
 
-class _CompactCityCard extends StatelessWidget {
-  const _CompactCityCard({
+class _CityCard extends StatelessWidget {
+  const _CityCard({
     required this.city,
     required this.viewer,
     required this.snapshots,
@@ -1119,47 +1002,32 @@ class _CompactCityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final members = familyMembers.where((member) => member.cityId == city.id);
-    final representative = members.first;
-    final local = snapshots[representative.name]!.localTime;
+    final members = _members(city.id);
+    final local = snapshots[members.first.name]!.localTime;
     final free = members
-        .where(
-          (member) => snapshots[member.name]!.kind ==
-              AvailabilityKind.likelyFree,
-        )
+        .where((member) => snapshots[member.name]!.kind == AvailabilityKind.likelyFree)
         .length;
-    final difference = timezone
+    final offset = timezone
         .snapshot(cityId: city.id, viewerCityId: viewer.cityId)
         .viewerDifference
         .inHours;
-    final practical = bundle == null
+    final current = bundle?.current;
+    final guidance = bundle == null
         ? 'Weather unavailable'
         : alerts.derive(city.id, bundle!).firstOrNull?.headline ??
             'No major disruption expected';
-    final current = bundle?.current;
-    final day = bundle?.daily.firstOrNull;
-    final sky = current ?? _offlineSky(local);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
-        onTap: () => Navigator.pushNamed(
-          context,
-          PourToujoursRouteNames.city,
-          arguments: DetailRouteArgs(
-            title: city.name,
-            subtitle:
-                '${members.length} family members · ${bundle?.condition ?? 'Weather unavailable'}',
-            payload: city.id,
-          ),
-        ),
+        onTap: () => _openCity(context, city, bundle),
         child: AmbientSky(
-          weather: sky,
-          day: day,
+          weather: current ?? _offlineWeather(local),
+          day: bundle?.daily.firstOrNull,
           height: 206,
           borderRadius: BorderRadius.circular(24),
           semanticLabel:
-              '${city.name}, ${DateFormat('h:mm a').format(local)}, ${bundle?.condition ?? 'weather unavailable'}, $free people usually free.',
+              '${city.name}, ${DateFormat('h:mm a').format(local)}, ${bundle?.condition ?? 'weather unavailable'}, $free usually free.',
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -1177,15 +1045,12 @@ class _CompactCityCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded,
-                        color: Colors.white70),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.white70),
                   ],
                 ),
                 Text(
                   DateFormat(
-                    settings.clockFormat == ClockFormat.twentyFourHour
-                        ? 'HH:mm'
-                        : 'h:mm a',
+                    settings.clockFormat == ClockFormat.twentyFourHour ? 'HH:mm' : 'h:mm a',
                   ).format(local),
                   style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
@@ -1198,26 +1063,22 @@ class _CompactCityCard extends StatelessWidget {
                       fontSize: 31,
                       height: 1,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -1,
                     ),
                   ),
                 Text(
                   bundle?.condition ?? 'Offline',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 Text(
-                  practical,
+                  guidance,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70, fontSize: 10),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 Text(
-                  '$free usually free · ${difference == 0 ? 'same time' : '${difference.abs()}h ${difference.isNegative ? 'behind' : 'ahead'}'}',
+                  '$free usually free · ${_offsetLabel(offset)}',
                   style: const TextStyle(color: Colors.white70, fontSize: 10),
                 ),
               ],
@@ -1227,28 +1088,10 @@ class _CompactCityCard extends StatelessWidget {
       ),
     );
   }
-
-  CurrentWeather _offlineSky(DateTime local) => CurrentWeather(
-        time: local,
-        temperature: 0,
-        feelsLike: 0,
-        weatherCode: 3,
-        isDay: local.hour >= 6 && local.hour < 18,
-        precipitation: 0,
-        rainChance: 0,
-        windSpeed: 0,
-        windGusts: 0,
-        windDirection: 0,
-        humidity: 0,
-        visibility: 10000,
-        uvIndex: 0,
-        cloudCover: 80,
-        surfacePressure: 1013,
-      );
 }
 
-class _ConnectionWindowCard extends StatelessWidget {
-  const _ConnectionWindowCard({
+class _ConnectionPreview extends StatelessWidget {
+  const _ConnectionPreview({
     required this.viewer,
     required this.selectedPeople,
     required this.weather,
@@ -1262,35 +1105,19 @@ class _ConnectionWindowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final window = _bestWindow(selectedPeople);
-    final viewerCity = cities.firstWhere((city) => city.id == viewer.cityId);
+    final recommendation = _bestWindow(selectedPeople);
     final viewerLocal = evaluateAvailability(
       member: viewer,
-      city: viewerCity,
-      now: window.start,
+      city: _city(viewer.cityId),
+      now: recommendation.start,
     ).localTime;
-    final cityTimes = [
-      for (final city in cities)
-        (
-          city,
-          evaluateAvailability(
-            member: familyMembers.firstWhere(
-              (member) => member.cityId == city.id,
-            ),
-            city: city,
-            now: window.start,
-          ).localTime,
-        ),
-    ];
-    final conflicts = weather.entries
-        .where(
-          (entry) => entry.value != null &&
-              WeatherAlertService().derive(entry.key, entry.value!).any(
-                    (alert) => alert.severity == WeatherAlertSeverity.severe ||
-                        alert.severity == WeatherAlertSeverity.extreme,
-                  ),
-        )
-        .length;
+    final conflicts = weather.entries.where((entry) {
+      if (entry.value == null) return false;
+      return WeatherAlertService().derive(entry.key, entry.value!).any(
+            (alert) => alert.severity == WeatherAlertSeverity.severe ||
+                alert.severity == WeatherAlertSeverity.extreme,
+          );
+    }).length;
     return Material(
       color: context.pt.card,
       shape: RoundedRectangleBorder(
@@ -1307,13 +1134,8 @@ class _ConnectionWindowCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: context.pt.accent.withValues(alpha: .13),
-                      shape: BoxShape.circle,
-                    ),
+                  CircleAvatar(
+                    backgroundColor: context.pt.accent.withValues(alpha: .13),
                     child: Icon(Icons.call_rounded, color: context.pt.accent),
                   ),
                   const SizedBox(width: 12),
@@ -1322,68 +1144,62 @@ class _ConnectionWindowCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _relativeDay(window.start, viewerLocal),
+                          'BEST ROUTINE OVERLAP · YOUR TIME',
                           style: TextStyle(
                             color: context.pt.secondaryText,
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
+                            letterSpacing: .8,
                           ),
                         ),
                         Text(
-                          '${DateFormat('h:mm').format(viewerLocal)}–${DateFormat('h:mm a').format(viewerLocal.add(window.duration))}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                          '${DateFormat('EEE, h:mm').format(viewerLocal)}–${DateFormat('h:mm a').format(viewerLocal.add(recommendation.duration))}',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ],
                     ),
                   ),
-                  _ComfortRing(score: window.score),
+                  _ScoreRing(score: recommendation.score),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                window.reason,
-                style: TextStyle(color: context.pt.secondaryText),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 13),
+              Text(recommendation.reason, style: TextStyle(color: context.pt.secondaryText)),
+              const SizedBox(height: 13),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final item in cityTimes)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.pt.surface,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        '${item.$1.name} ${DateFormat('h:mm a').format(item.$2)}${item.$2.hour < 6 || item.$2.hour >= 23 ? ' · late' : ''}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                  for (final city in cities)
+                    Builder(
+                      builder: (context) {
+                        final local = evaluateAvailability(
+                          member: _members(city.id).first,
+                          city: city,
+                          now: recommendation.start,
+                        ).localTime;
+                        final late = local.hour < 6 || local.hour >= 23;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: context.pt.surface,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            '${city.name} ${DateFormat('h:mm a').format(local)}${late ? ' · late' : ''}',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                          ),
+                        );
+                      },
                     ),
                 ],
               ),
-              const SizedBox(height: 13),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Icon(
-                    conflicts == 0
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.warning_amber_rounded,
+                    conflicts == 0 ? Icons.check_circle_outline : Icons.warning_amber_rounded,
                     size: 17,
-                    color: conflicts == 0
-                        ? context.pt.success
-                        : context.pt.warning,
+                    color: conflicts == 0 ? context.pt.success : context.pt.warning,
                   ),
                   const SizedBox(width: 7),
                   Expanded(
@@ -1391,10 +1207,7 @@ class _ConnectionWindowCard extends StatelessWidget {
                       conflicts == 0
                           ? 'No severe forecast conflict detected for this preview.'
                           : '$conflicts city conditions may make this window less comfortable.',
-                      style: TextStyle(
-                        color: context.pt.secondaryText,
-                        fontSize: 11,
-                      ),
+                      style: TextStyle(color: context.pt.secondaryText, fontSize: 11),
                     ),
                   ),
                   const Icon(Icons.chevron_right_rounded),
@@ -1406,29 +1219,10 @@ class _ConnectionWindowCard extends StatelessWidget {
       ),
     );
   }
-
-  String _relativeDay(DateTime instant, DateTime viewerLocal) {
-    final now = DateTime.now();
-    final localNow = evaluateAvailability(
-      member: viewer,
-      city: cities.firstWhere((city) => city.id == viewer.cityId),
-      now: now,
-    ).localTime;
-    final dayDifference = DateTime(
-      viewerLocal.year,
-      viewerLocal.month,
-      viewerLocal.day,
-    ).difference(
-      DateTime(localNow.year, localNow.month, localNow.day),
-    ).inDays;
-    if (dayDifference == 0) return 'TODAY · YOUR TIME';
-    if (dayDifference == 1) return 'TOMORROW · YOUR TIME';
-    return '${DateFormat('EEEE').format(viewerLocal).toUpperCase()} · YOUR TIME';
-  }
 }
 
-class _ComfortRing extends StatelessWidget {
-  const _ComfortRing({required this.score});
+class _ScoreRing extends StatelessWidget {
+  const _ScoreRing({required this.score});
   final double score;
 
   @override
@@ -1446,10 +1240,7 @@ class _ComfortRing extends StatelessWidget {
               strokeWidth: 5,
               backgroundColor: context.pt.outline,
             ),
-            Text(
-              '${(score * 100).round()}',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
+            Text('${(score * 100).round()}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
           ],
         ),
       ),
@@ -1462,14 +1253,14 @@ class _ImportantToday extends StatelessWidget {
     required this.viewer,
     required this.weather,
     required this.officialAlerts,
-    required this.alerts,
+    required this.alertService,
     required this.timezone,
   });
 
   final FamilyMember viewer;
   final Map<String, WeatherBundle?> weather;
   final List<FamilyWeatherAlert> officialAlerts;
-  final WeatherAlertService alerts;
+  final WeatherAlertService alertService;
   final TimezoneIntelligenceService timezone;
 
   @override
@@ -1484,71 +1275,52 @@ class _ImportantToday extends StatelessWidget {
           eyebrow: 'OFFICIAL WEATHER ALERT',
           title: alert.headline,
           subtitle: alert.instruction,
-          onTap: () => Navigator.pushNamed(
-            context,
-            PourToujoursRouteNames.alert,
-            arguments: DetailRouteArgs(
-              title: alert.event,
-              subtitle: alert.headline,
-              payload: alert,
-            ),
-          ),
+          onTap: () => _openAlert(context, alert),
         ),
       );
     }
     for (final entry in weather.entries) {
       final bundle = entry.value;
       if (bundle == null) continue;
-      for (final alert in alerts.derive(entry.key, bundle).take(1)) {
-        final city = cities.firstWhere((city) => city.id == entry.key);
-        items.add(
-          _ImportantItem(
-            priority: alert.severity.index + 2,
-            icon: Icons.cloud_outlined,
-            color: context.pt.warning,
-            eyebrow: 'APP-GENERATED GUIDANCE · ${city.name.toUpperCase()}',
-            title: alert.headline,
-            subtitle: alert.instruction,
-            onTap: () => Navigator.pushNamed(
-              context,
-              PourToujoursRouteNames.alert,
-              arguments: DetailRouteArgs(
-                title: alert.event,
-                subtitle: alert.headline,
-                payload: alert,
-              ),
-            ),
-          ),
-        );
-      }
-    }
-    final changes = [
-      for (final city in cities)
-        (
-          city,
-          timezone.snapshot(
-            cityId: city.id,
-            viewerCityId: viewer.cityId,
-          ).nextChange,
+      final alert = alertService.derive(entry.key, bundle).firstOrNull;
+      if (alert == null) continue;
+      items.add(
+        _ImportantItem(
+          priority: 2 + alert.severity.index,
+          icon: Icons.cloud_outlined,
+          color: context.pt.warning,
+          eyebrow: 'APP-GENERATED GUIDANCE · ${_city(entry.key).name.toUpperCase()}',
+          title: alert.headline,
+          subtitle: alert.instruction,
+          onTap: () => _openAlert(context, alert),
         ),
-    ].where((item) => item.$2 != null).toList()
+      );
+    }
+    final changes = cities
+        .map(
+          (city) => (
+            city,
+            timezone.snapshot(cityId: city.id, viewerCityId: viewer.cityId).nextChange,
+          ),
+        )
+        .where((item) => item.$2 != null)
+        .toList()
       ..sort((a, b) => a.$2!.at.compareTo(b.$2!.at));
     if (changes.isNotEmpty &&
         changes.first.$2!.at.difference(DateTime.now().toUtc()).inDays <= 14) {
-      final change = changes.first;
       items.add(
         _ImportantItem(
           priority: 3,
           icon: Icons.more_time_rounded,
           color: context.pt.accent,
           eyebrow: 'CLOCK CHANGE',
-          title: timezone.describeChange(change.$2!, change.$1.name),
+          title: timezone.describeChange(changes.first.$2!, changes.first.$1.name),
           subtitle: 'The time difference across the family will change.',
           onTap: () {},
         ),
       );
     }
-    final birthday = _nearestBirthday();
+    final birthday = _nextBirthdayWithDate();
     if (birthday.$3 <= 14) {
       items.add(
         _ImportantItem(
@@ -1573,17 +1345,17 @@ class _ImportantToday extends StatelessWidget {
     if (items.isEmpty) {
       return const PtEmptyState(
         title: 'A quiet family day',
-        message:
-            'No major alert, clock change, or near birthday needs attention right now.',
+        message: 'No major alert, clock change, or near birthday needs attention right now.',
         icon: Icons.spa_outlined,
       );
     }
-    return Container(
-      decoration: BoxDecoration(
-        color: context.pt.card,
+    return Material(
+      color: context.pt.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.pt.outline),
+        side: BorderSide(color: context.pt.outline),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           for (var index = 0; index < math.min(items.length, 5); index++) ...[
@@ -1605,41 +1377,16 @@ class _ImportantToday extends StatelessWidget {
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 3),
-                  Text(
-                    items[index].title,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    items[index].subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(items[index].title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(items[index].subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
             ),
-            if (index < math.min(items.length, 5) - 1)
-              const Divider(height: 1, indent: 72),
+            if (index < math.min(items.length, 5) - 1) const Divider(height: 1, indent: 72),
           ],
         ],
       ),
-    );
-  }
-
-  (String, DateTime, int) _nearestBirthday() {
-    final now = DateTime.now();
-    final values = [...familyBirthdays]
-      ..sort(
-        (a, b) =>
-            a.nextOccurrence(now).compareTo(b.nextOccurrence(now)),
-      );
-    final item = values.first;
-    final date = item.nextOccurrence(now);
-    return (
-      item.name,
-      date,
-      date.difference(DateTime(now.year, now.month, now.day)).inDays,
     );
   }
 }
@@ -1671,10 +1418,7 @@ class _UpcomingMoments extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final values = [...familyBirthdays]
-      ..sort(
-        (a, b) =>
-            a.nextOccurrence(now).compareTo(b.nextOccurrence(now)),
-      );
+      ..sort((a, b) => a.nextOccurrence(now).compareTo(b.nextOccurrence(now)));
     return SizedBox(
       height: 132,
       child: ListView.separated(
@@ -1710,21 +1454,11 @@ class _UpcomingMoments extends StatelessWidget {
                     children: [
                       Icon(Icons.cake_outlined, color: context.pt.birthday),
                       const Spacer(),
-                      Text(
-                        item.name,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      Text(
-                        DateFormat('d MMMM').format(next),
-                        style: TextStyle(color: context.pt.secondaryText),
-                      ),
+                      Text(item.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      Text(DateFormat('d MMMM').format(next), style: TextStyle(color: context.pt.secondaryText)),
                       Text(
                         days == 0 ? 'Today' : 'In $days days',
-                        style: TextStyle(
-                          color: context.pt.success,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: TextStyle(color: context.pt.success, fontSize: 10, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -1738,21 +1472,21 @@ class _UpcomingMoments extends StatelessWidget {
   }
 }
 
-class _CityPlacement {
-  const _CityPlacement(this.cityId, this.alignment);
+class _Placement {
+  const _Placement(this.cityId, this.alignment);
   final String cityId;
   final Alignment alignment;
 }
 
-const _cityPlacements = [
-  _CityPlacement('karachi', Alignment(-.72, -.35)),
-  _CityPlacement('chiba', Alignment(.72, -.48)),
-  _CityPlacement('dublin', Alignment(-.64, .55)),
-  _CityPlacement('hattiesburg', Alignment(.68, .62)),
+const _placements = [
+  _Placement('karachi', Alignment(-.72, -.35)),
+  _Placement('chiba', Alignment(.72, -.48)),
+  _Placement('dublin', Alignment(-.64, .55)),
+  _Placement('hattiesburg', Alignment(.68, .62)),
 ];
 
-class _WindowRecommendation {
-  const _WindowRecommendation({
+class _Recommendation {
+  const _Recommendation({
     required this.start,
     required this.duration,
     required this.score,
@@ -1765,47 +1499,91 @@ class _WindowRecommendation {
   final String reason;
 }
 
-_WindowRecommendation _bestWindow(Set<String> selectedPeople) {
-  final selected = familyMembers
-      .where((member) => selectedPeople.contains(member.name))
-      .toList();
+_Recommendation _bestWindow(Set<String> selectedNames) {
+  final selected = familyMembers.where((member) => selectedNames.contains(member.name)).toList();
   final now = DateTime.now().toUtc();
   var bestStart = now;
   var bestScore = -1.0;
-  var awakeCount = 0;
+  var bestAwake = 0;
   for (var step = 0; step < 96; step++) {
     final instant = now.add(Duration(minutes: step * 15));
-    final scores = <double>[];
+    var total = 0.0;
     var awake = 0;
     for (final member in selected) {
-      final snapshot = evaluateAvailability(
+      final kind = evaluateAvailability(
         member: member,
-        city: cities.firstWhere((city) => city.id == member.cityId),
+        city: _city(member.cityId),
         now: instant,
-      );
-      scores.add(_availabilityScore(snapshot.kind));
-      if (snapshot.kind != AvailabilityKind.asleep) awake++;
+      ).kind;
+      total += _availabilityScore(kind);
+      if (kind != AvailabilityKind.asleep) awake++;
     }
-    final mean = scores.isEmpty
-        ? 0.0
-        : scores.reduce((a, b) => a + b) / scores.length;
-    final awakeBonus = selected.isEmpty ? 0 : awake / selected.length * .12;
-    final score = (mean + awakeBonus).clamp(0.0, 1.0);
+    final mean = selected.isEmpty ? 0.0 : total / selected.length;
+    final score = (mean + (selected.isEmpty ? 0 : awake / selected.length * .12)).clamp(0.0, 1.0);
     if (score > bestScore) {
       bestScore = score;
       bestStart = instant;
-      awakeCount = awake;
+      bestAwake = awake;
     }
   }
-  final included = selected.length;
-  return _WindowRecommendation(
+  return _Recommendation(
     start: bestStart,
     duration: const Duration(minutes: 75),
     score: bestScore,
     reason:
-        '$awakeCount of $included selected people are expected to be awake, with the strongest combined routine comfort in the next 24 hours.',
+        '$bestAwake of ${selected.length} selected people are expected to be awake, with the strongest combined routine comfort in the next 24 hours.',
   );
 }
+
+(String, String) _nextBirthday() {
+  final item = _nextBirthdayWithDate();
+  return ('${item.$1}’s birthday', item.$3 == 0 ? 'Today' : 'In ${item.$3} days');
+}
+
+(String, DateTime, int) _nextBirthdayWithDate() {
+  final now = DateTime.now();
+  final values = [...familyBirthdays]
+    ..sort((a, b) => a.nextOccurrence(now).compareTo(b.nextOccurrence(now)));
+  final date = values.first.nextOccurrence(now);
+  return (
+    values.first.name,
+    date,
+    date.difference(DateTime(now.year, now.month, now.day)).inDays,
+  );
+}
+
+void _openCity(BuildContext context, FamilyCity city, WeatherBundle? bundle) {
+  Navigator.pushNamed(
+    context,
+    PourToujoursRouteNames.city,
+    arguments: DetailRouteArgs(
+      title: city.name,
+      subtitle: '${_members(city.id).length} family members · ${bundle?.condition ?? 'Weather unavailable'}',
+      payload: city.id,
+    ),
+  );
+}
+
+void _openAlert(BuildContext context, FamilyWeatherAlert alert) {
+  Navigator.pushNamed(
+    context,
+    PourToujoursRouteNames.alert,
+    arguments: DetailRouteArgs(
+      title: alert.event,
+      subtitle: alert.headline,
+      payload: alert,
+    ),
+  );
+}
+
+FamilyCity _city(String id) => cities.firstWhere((city) => city.id == id);
+
+List<FamilyMember> _members(String cityId) =>
+    familyMembers.where((member) => member.cityId == cityId).toList();
+
+String _offsetLabel(int hours) => hours == 0
+    ? 'same time'
+    : '${hours.abs()}h ${hours.isNegative ? 'behind' : 'ahead'}';
 
 double _availabilityScore(AvailabilityKind kind) => switch (kind) {
       AvailabilityKind.likelyFree => 1,
@@ -1816,17 +1594,15 @@ double _availabilityScore(AvailabilityKind kind) => switch (kind) {
     };
 
 AvailabilityKind _dominantKind(Iterable<AvailabilityKind> kinds) {
-  final values = kinds.toList();
-  if (values.isEmpty) return AvailabilityKind.unknown;
   final counts = <AvailabilityKind, int>{};
-  for (final kind in values) {
+  for (final kind in kinds) {
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
+  if (counts.isEmpty) return AvailabilityKind.unknown;
   return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
 }
 
-Color _timelineColor(BuildContext context, AvailabilityKind kind) =>
-    switch (kind) {
+Color _timelineColor(BuildContext context, AvailabilityKind kind) => switch (kind) {
       AvailabilityKind.likelyFree => context.pt.success,
       AvailabilityKind.maybeFree => context.pt.uncertain,
       AvailabilityKind.working => context.pt.working,
@@ -1853,6 +1629,42 @@ IconData _weatherIcon(int? code, bool isDay) {
   if (code >= 2) return Icons.cloud_outlined;
   return isDay ? Icons.light_mode_rounded : Icons.dark_mode_rounded;
 }
+
+CurrentWeather _neutralWeather() => CurrentWeather(
+      time: DateTime.now(),
+      temperature: 0,
+      feelsLike: 0,
+      weatherCode: 2,
+      isDay: true,
+      precipitation: 0,
+      rainChance: 0,
+      windSpeed: 0,
+      windGusts: 0,
+      windDirection: 0,
+      humidity: 0,
+      visibility: 10000,
+      uvIndex: 0,
+      cloudCover: 40,
+      surfacePressure: 1013,
+    );
+
+CurrentWeather _offlineWeather(DateTime local) => CurrentWeather(
+      time: local,
+      temperature: 0,
+      feelsLike: 0,
+      weatherCode: 3,
+      isDay: local.hour >= 6 && local.hour < 18,
+      precipitation: 0,
+      rainChance: 0,
+      windSpeed: 0,
+      windGusts: 0,
+      windDirection: 0,
+      humidity: 0,
+      visibility: 10000,
+      uvIndex: 0,
+      cloudCover: 80,
+      surfacePressure: 1013,
+    );
 
 extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
