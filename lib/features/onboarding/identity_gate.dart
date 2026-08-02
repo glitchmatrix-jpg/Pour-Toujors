@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/identity/identity_store.dart';
-import '../home/premium_home_screen.dart';
+import '../home/premium_home_screen_v2.dart';
 import 'identity_setup_screen.dart';
 
 class IdentityGate extends StatefulWidget {
@@ -52,6 +52,6 @@ class _IdentityGateState extends State<IdentityGate> {
       );
     }
     if (selected == null) return IdentitySetupScreen(onSelected: _select);
-    return PremiumHomeScreen(viewerName: selected!, onSwitchProfile: _switchProfile);
+    return PremiumHomeScreenV2(viewerName: selected!, onSwitchProfile: _switchProfile);
   }
 }
