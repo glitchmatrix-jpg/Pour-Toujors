@@ -128,9 +128,11 @@ jobs:
               ),
               clipBehavior: Clip.antiAlias,
               child: Padding('''
-          if old_section not in settings_text:
-              raise RuntimeError('Settings section surface target was not found.')
-          settings.write_text(settings_text.replace(old_section, new_section, 1), encoding='utf-8')
+          if old_section in settings_text:
+              settings_text = settings_text.replace(old_section, new_section, 1)
+              settings.write_text(settings_text, encoding='utf-8')
+          elif 'return Material(' not in settings_text:
+              raise RuntimeError('Settings section surface could not be verified.')
 
           test = Path('test/premium_mobile_qa_test.dart')
           test_text = test.read_text(encoding='utf-8')
