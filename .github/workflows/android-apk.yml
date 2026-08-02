@@ -36,7 +36,7 @@ env:
 
 jobs:
   validate-and-build:
-    name: Validate complete city experience and build APK
+    name: Validate people calendar and build APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -111,16 +111,16 @@ jobs:
           grep -F 'android:label="Pour Toujours"' android/app/src/main/AndroidManifest.xml
           grep -F 'android:icon="@drawable/ic_pour_toujours"' android/app/src/main/AndroidManifest.xml
           grep -F '<uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-          grep -F 'version: 0.8.0+8' pubspec.yaml
+          grep -F 'version: 0.9.0+9' pubspec.yaml
           test -s assets/brand/pour_toujours_mark.svg
 
       - name: Build debug APK
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
-        run: flutter build apk --debug --build-name=0.8.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --debug --build-name=0.9.0 --build-number=${{ github.run_number }}
 
       - name: Build release APK for QA
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
-        run: flutter build apk --release --build-name=0.8.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-name=0.9.0 --build-number=${{ github.run_number }}
 
       - name: Collect APKs and checksums
         if: always()
