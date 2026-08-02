@@ -612,7 +612,7 @@ class _SevenDayForecast extends StatelessWidget {
       );
     }
     return SizedBox(
-      height: 218,
+      height: 226,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: bundle.daily.length,
