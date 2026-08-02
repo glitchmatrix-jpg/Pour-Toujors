@@ -90,6 +90,29 @@ jobs:
             <path android:fillColor="#E8B64C" android:pathData="M82,18L85,25L92,28L85,31L82,38L79,31L72,28L79,25Z"/>
           </vector>
           ''', encoding='utf-8')
+
+          screen = Path('lib/features/home/premium_home_screen_v3.dart')
+          source = screen.read_text(encoding='utf-8')
+          source = source.replace(
+              "if (hour < 12) return 'Good morning';\n    if (hour < 18) return 'Good afternoon';",
+              "if (hour < 12) {\n      return 'Good morning';\n    }\n    if (hour < 18) {\n      return 'Good afternoon';\n    }",
+          )
+          source = source.replace(
+              "if (snapshot.connectionState == ConnectionState.waiting) return const PtLoadingSkeleton(height: 210);",
+              "if (snapshot.connectionState == ConnectionState.waiting) {\n              return const PtLoadingSkeleton(height: 210);\n            }",
+          )
+          source = source.replace(
+              "if (!snapshot.hasData || snapshot.data!.isEmpty) return const PtEmptyState(title: 'Holiday information unavailable', message: 'Connect to the internet and pull down on Today to retry.');",
+              "if (!snapshot.hasData || snapshot.data!.isEmpty) {\n              return const PtEmptyState(\n                title: 'Holiday information unavailable',\n                message: 'Connect to the internet and pull down on Today to retry.',\n              );\n            }",
+          )
+          screen.write_text(source, encoding='utf-8')
+
+          test = Path('test/premium_mobile_qa_test.dart')
+          test_text = test.read_text(encoding='utf-8').replace(
+              '    WeatherService.debugOverrides = null;\n',
+              '',
+          )
+          test.write_text(test_text, encoding='utf-8')
           PY
 
       - name: Install Flutter packages
