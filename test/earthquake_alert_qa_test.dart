@@ -10,9 +10,9 @@ void main() {
   test('USGS earthquakes enter the existing city warning stream', () async {
     final eventTime = DateTime.utc(2026, 8, 2, 18).millisecondsSinceEpoch;
     final client = MockClient((request) async {
-      expect(request.host, 'earthquake.usgs.gov');
+      expect(request.url.host, 'earthquake.usgs.gov');
       expect(
-        request.path,
+        request.url.path,
         '/earthquakes/feed/v1.0/summary/all_day.geojson',
       );
       return http.Response(
