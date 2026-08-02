@@ -10,6 +10,7 @@ import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/data/family_seed.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
+import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
 
 void main() {
   setUpAll(tz.initializeTimeZones);
@@ -104,6 +105,7 @@ void main() {
           theme: PourToujoursTheme.build(settings.theme, Brightness.light),
           darkTheme: PourToujoursTheme.build(settings.theme, Brightness.dark),
           themeMode: settings.themeMode,
+          onGenerateRoute: PourToujoursRoutes.onGenerateRoute,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
@@ -158,7 +160,11 @@ void main() {
   }
 
   testWidgets('Settings changes theme and reduced motion', (tester) async {
-    final controller = await pumpHome(tester, const Size(390, 844));
+    final controller = await pumpHome(
+      tester,
+      const Size(390, 844),
+      settings: const AppSettings(reducedMotion: false),
+    );
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
 
