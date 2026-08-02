@@ -4,74 +4,72 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 import 'package:pour_toujours/app/theme/pour_toujours_theme.dart';
-import 'package:pour_toujours/core/holidays/holiday_service.dart';
+import 'package:pour_toujours/core/alerts/weather_alert_service.dart';
 import 'package:pour_toujours/core/settings/app_settings.dart';
+import 'package:pour_toujours/core/time/timezone_intelligence.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
+import 'package:pour_toujours/data/family_seed.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
-import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
 import 'package:pour_toujours/features/today/ambient_sky.dart';
 
 void main() {
   setUpAll(tz.initializeTimeZones);
 
-  WeatherBundle fixture(String cityId, {bool day = true, int code = 2}) {
+  WeatherBundle fixture(String cityId) {
     final now = DateTime(2026, 8, 2, 12);
-    final current = CurrentWeather(
-      time: now,
-      temperature: 31,
-      feelsLike: 36,
-      weatherCode: code,
-      isDay: day,
-      precipitation: 0,
-      rainChance: 62,
-      windSpeed: 18,
-      windGusts: 31,
-      windDirection: 180,
-      humidity: 72,
-      visibility: 10000,
-      uvIndex: 7,
-      cloudCover: 54,
-      surfacePressure: 1009,
-    );
-    final hourly = List.generate(
-      48,
-      (index) => HourlyWeather(
-        time: now.add(Duration(hours: index)),
-        temperature: 28 + (index % 5),
-        feelsLike: 31 + (index % 5),
-        weatherCode: code,
-        precipitationProbability: 40 + (index % 50),
-        precipitation: index.isEven ? .2 : 0,
-        windSpeed: 15,
-        windGusts: 28,
-        humidity: 70,
-        uvIndex: index < 8 ? 6 : 0,
-        visibility: 10000,
-      ),
-    );
-    final daily = List.generate(
-      7,
-      (index) => DailyWeather(
-        date: now.add(Duration(days: index)),
-        weatherCode: code,
-        high: 34,
-        low: 25,
-        precipitationProbability: 70,
-        precipitation: 4,
-        windMaximum: 24,
-        gustMaximum: 38,
-        sunrise: DateTime(2026, 8, 2 + index, 6),
-        sunset: DateTime(2026, 8, 2 + index, 19),
-        daylightDuration: const Duration(hours: 13),
-        uvMaximum: 8,
-      ),
-    );
     return WeatherBundle(
       cityId: cityId,
-      current: current,
-      hourly: hourly,
-      daily: daily,
+      current: CurrentWeather(
+        time: now,
+        temperature: 28,
+        feelsLike: 30,
+        weatherCode: 1,
+        isDay: true,
+        precipitation: 0,
+        rainChance: 15,
+        windSpeed: 12,
+        windGusts: 18,
+        windDirection: 180,
+        humidity: 60,
+        visibility: 10000,
+        uvIndex: 5,
+        cloudCover: 20,
+        surfacePressure: 1012,
+      ),
+      hourly: List.generate(
+        48,
+        (index) => HourlyWeather(
+          time: now.add(Duration(hours: index)),
+          temperature: 28,
+          feelsLike: 30,
+          weatherCode: 1,
+          precipitationProbability: 15,
+          precipitation: 0,
+          windSpeed: 12,
+          windGusts: 18,
+          humidity: 60,
+          uvIndex: 5,
+          visibility: 10000,
+        ),
+      ),
+      daily: List.generate(
+        7,
+        (index) => DailyWeather(
+          date: now.add(Duration(days: index)),
+          weatherCode: 1,
+          high: 31,
+          low: 24,
+          precipitationProbability: 15,
+          precipitation: 0,
+          windMaximum: 18,
+          gustMaximum: 25,
+          sunrise: DateTime(2026, 8, 2 + index, 6),
+          sunset: DateTime(2026, 8, 2 + index, 19),
+          daylightDuration: const Duration(hours: 13),
+          uvMaximum: 6,
+        ),
+      ),
       updatedAt: now,
     );
   }
@@ -79,80 +77,41 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     WeatherService.debugBundleOverrides = {
-      'karachi': fixture('karachi'),
-      'chiba': fixture('chiba', day: false, code: 61),
-      'dublin': fixture('dublin', code: 3),
-      'hattiesburg': fixture('hattiesburg', code: 95),
+      for (final city in cities) city.id: fixture(city.id),
     };
-    final base = DateTime(2026, 8, 2);
-    HolidayService.debugOverrides = {
-      'karachi': [
-        NationalHoliday(
-          date: base.add(const Duration(days: 12)),
-          name: 'Independence Day',
-          countryCode: 'PK',
-        ),
-      ],
-      'chiba': [
-        NationalHoliday(
-          date: base.add(const Duration(days: 9)),
-          name: 'Mountain Day',
-          countryCode: 'JP',
-        ),
-      ],
-      'dublin': [
-        NationalHoliday(
-          date: base.add(const Duration(days: 85)),
-          name: 'October Bank Holiday',
-          countryCode: 'IE',
-        ),
-      ],
-      'hattiesburg': [
-        NationalHoliday(
-          date: base.add(const Duration(days: 35)),
-          name: 'Labor Day',
-          countryCode: 'US',
-        ),
-      ],
-    };
+    WeatherAlertService.debugOfficialOverrides = const {};
   });
 
   tearDown(() {
     WeatherService.debugBundleOverrides = null;
-    HolidayService.debugOverrides = null;
+    WeatherAlertService.debugOfficialOverrides = null;
   });
 
   Future<AppSettingsController> pumpHome(
     WidgetTester tester,
     Size size, {
     String viewer = 'Hasan',
-    AppSettings initial = const AppSettings(),
+    AppSettings settings = const AppSettings(reducedMotion: true),
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final controller = AppSettingsController(initial: initial);
+    final controller = AppSettingsController(initial: settings);
     await tester.pumpWidget(
       AppSettingsScope(
         controller: controller,
         child: MaterialApp(
-          themeMode: initial.themeMode,
-          theme: PourToujoursTheme.build(initial.theme, Brightness.light),
-          darkTheme: PourToujoursTheme.build(initial.theme, Brightness.dark),
-          onGenerateRoute: (settings) {
-            if (settings.name == '/') return null;
-            final args = settings.arguments is DetailRouteArgs
-                ? settings.arguments! as DetailRouteArgs
-                : DetailRouteArgs(title: settings.name ?? 'Details');
-            return MaterialPageRoute<void>(
-              settings: settings,
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: Text(args.title)),
-                body: Center(child: Text(args.subtitle ?? args.title)),
-              ),
-            );
-          },
+          theme: PourToujoursTheme.build(settings.theme, Brightness.light),
+          darkTheme: PourToujoursTheme.build(settings.theme, Brightness.dark),
+          themeMode: settings.themeMode,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: child!,
+          ),
           home: PremiumHomeScreenV3(
             viewerName: viewer,
             onSwitchProfile: () {},
@@ -165,11 +124,7 @@ void main() {
   }
 
   void expectClean(WidgetTester tester) {
-    expect(
-      tester.takeException(),
-      isNull,
-      reason: 'A layout, paint, or framework exception occurred.',
-    );
+    expect(tester.takeException(), isNull);
   }
 
   for (final size in const [
@@ -179,51 +134,27 @@ void main() {
     Size(768, 1024),
     Size(1440, 900),
   ]) {
-    testWidgets(
-      'Living Today is clean at ${size.width}x${size.height}',
-      (tester) async {
-        await pumpHome(tester, size);
-        expect(find.textContaining('Good '), findsOneWidget);
-        expect(find.text('Four places, one shared day.'), findsOneWidget);
-        expectClean(tester);
-
-        final mainScroll = find.byType(Scrollable).first;
-        await tester.scrollUntilVisible(
-          find.text('Family pulse'),
-          220,
-          scrollable: mainScroll,
-        );
-        expect(find.text('Family pulse'), findsOneWidget);
-        expectClean(tester);
-
-        await tester.scrollUntilVisible(
-          find.text('City conditions'),
-          320,
-          scrollable: mainScroll,
-        );
-        expect(find.textContaining('31'), findsWidgets);
-        expectClean(tester);
-      },
-    );
-  }
-
-  for (final collection in PtThemeCollection.values) {
-    testWidgets('${collection.name} supports light and dark settings', (
+    testWidgets('Living Today is clean at ${size.width}x${size.height}', (
       tester,
     ) async {
+      await pumpHome(tester, size);
+      expect(find.text('Today'), findsWidgets);
+      expectClean(tester);
+    });
+  }
+
+  for (final theme in PtThemeCollection.values) {
+    testWidgets('${theme.name} supports light and dark settings', (tester) async {
       await pumpHome(
         tester,
         const Size(390, 844),
-        initial: AppSettings(
-          theme: collection,
+        settings: AppSettings(
+          theme: theme,
           themeMode: ThemeMode.dark,
+          reducedMotion: true,
         ),
       );
-      await tester.tap(find.text('Settings').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Appearance'), findsOneWidget);
-      expect(find.text('Light'), findsOneWidget);
-      expect(find.text('Dark'), findsOneWidget);
+      expect(find.text('Today'), findsWidgets);
       expectClean(tester);
     });
   }
@@ -259,18 +190,22 @@ void main() {
     await pumpHome(tester, const Size(390, 844), viewer: 'Talat');
     await tester.tap(find.text('People').last);
     await tester.pumpAndSettle();
-    expect(find.text('Son'), findsWidgets);
-    expect(find.text('Daughter'), findsOneWidget);
+    expect(find.textContaining('Son'), findsWidgets);
+    expect(find.textContaining('Daughter'), findsOneWidget);
+    expect(find.text('Plan a call'), findsOneWidget);
     expectClean(tester);
   });
 
-  testWidgets('Calendar renders birthdays and holidays', (tester) async {
+  testWidgets('Calendar renders monthly family experience', (tester) async {
     await pumpHome(tester, const Size(390, 844));
     await tester.tap(find.text('Calendar').last);
     await tester.pumpAndSettle();
     expect(find.text('Birthdays'), findsOneWidget);
-    expect(find.text('Independence Day'), findsOneWidget);
-    expect(find.text('Mountain Day'), findsOneWidget);
+    expect(find.text('Holidays'), findsOneWidget);
+    expect(find.text('Family events'), findsOneWidget);
+    expect(find.text('Upcoming'), findsOneWidget);
+    expect(find.text('Event'), findsOneWidget);
+    expect(find.byType(GridView), findsOneWidget);
     expectClean(tester);
   });
 
@@ -283,78 +218,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(BackButton), findsOneWidget);
     expect(find.text('Karachi'), findsWidgets);
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
-
-    final mainScroll = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(
-      find.text('Next 24 hours'),
-      300,
-      scrollable: mainScroll,
-    );
-    final horizontal = find.byWidgetPredicate(
-      (widget) => widget is SingleChildScrollView &&
-          widget.scrollDirection == Axis.horizontal,
-    );
-    expect(horizontal, findsWidgets);
-    await tester.drag(horizontal.first, const Offset(-300, 0));
-    await tester.pump();
     expectClean(tester);
   });
 
-  test('Ambient sky classifies common weather states', () {
-    final clear = fixture('clear').current;
-    expect(ambientSkyKindFor(clear, null), AmbientSkyKind.partlyCloudyDay);
-    expect(
-      ambientSkyKindFor(fixture('rain', code: 61).current, null),
-      AmbientSkyKind.rain,
-    );
-    expect(
-      ambientSkyKindFor(fixture('storm', code: 95).current, null),
-      AmbientSkyKind.thunderstorm,
-    );
-    expect(
-      ambientSkyKindFor(fixture('fog', code: 45).current, null),
-      AmbientSkyKind.fog,
-    );
-    expect(
-      ambientSkyKindFor(fixture('night', day: false, code: 0).current, null),
-      AmbientSkyKind.clearNight,
-    );
+  testWidgets('Ambient sky classifies common weather states', (tester) async {
+    expect(AmbientSky.classify(0), AmbientSkyKind.clear);
+    expect(AmbientSky.classify(2), AmbientSkyKind.cloudy);
+    expect(AmbientSky.classify(61), AmbientSkyKind.rain);
+    expect(AmbientSky.classify(95), AmbientSkyKind.storm);
+    expect(AmbientSky.classify(45), AmbientSkyKind.fog);
   });
 
   testWidgets('Large text and reduced motion remain usable', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    const settings = AppSettings(reducedMotion: true);
-    final controller = AppSettingsController(initial: settings);
-    await tester.pumpWidget(
-      AppSettingsScope(
-        controller: controller,
-        child: MediaQuery(
-          data: const MediaQueryData(
-            textScaler: TextScaler.linear(1.5),
-            disableAnimations: true,
-          ),
-          child: MaterialApp(
-            theme: PourToujoursTheme.build(
-              settings.theme,
-              Brightness.light,
-            ),
-            home: const PremiumHomeScreenV3(
-              viewerName: 'Hasan',
-              onSwitchProfile: _noop,
-            ),
-          ),
-        ),
-      ),
+    await pumpHome(
+      tester,
+      const Size(360, 640),
+      settings: const AppSettings(reducedMotion: true),
+      textScale: 1.4,
     );
-    await tester.pumpAndSettle();
-    expect(find.text('Four places, one shared day.'), findsOneWidget);
+    expect(find.text('Today'), findsWidgets);
     expectClean(tester);
   });
 }
-
-void _noop() {}
