@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/alerts/weather_alert_service.dart';
-import '../city/city_experience.dart';
+import '../city/city_experience_final.dart';
+import '../people/family_calendar_final.dart';
 import '../people/people_calendar_experience.dart';
 
 abstract final class PourToujoursRouteNames {
@@ -10,7 +11,6 @@ abstract final class PourToujoursRouteNames {
   static const hourlyWeather = '/weather/hourly';
   static const weatherCompare = '/weather/compare';
   static const person = '/person';
-  static const overlapPlanner = '/planner';
   static const calendar = '/calendar';
   static const eventEditor = '/event';
   static const holiday = '/holiday';
@@ -111,11 +111,8 @@ abstract final class PourToujoursRoutes {
             );
       return PersonDetailScreen(payload: payload);
     }
-    if (name == PourToujoursRouteNames.overlapPlanner) {
-      return ContactPlannerScreen(viewerName: args.viewerName ?? viewerName);
-    }
     if (name == PourToujoursRouteNames.calendar) {
-      return FamilyCalendarScreen(viewerName: args.viewerName ?? viewerName);
+      return FamilyCalendarFinalScreen(viewerName: args.viewerName ?? viewerName);
     }
     if (name == PourToujoursRouteNames.eventEditor) {
       return const EventEditorScreen();
