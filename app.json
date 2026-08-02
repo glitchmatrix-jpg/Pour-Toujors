@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Pour Toujours",
+    "slug": "pour-toujours",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "pourtoujours",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.hasanbukhari.pourtoujours" },
+    "android": { "package": "com.hasanbukhari.pourtoujours", "adaptiveIcon": { "backgroundColor": "#F3EEE6" } },
+    "web": { "bundler": "metro" }
+  }
+}
