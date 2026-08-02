@@ -37,54 +37,13 @@ abstract final class PourToujoursRoutes {
     final args = settings.arguments is DetailRouteArgs
         ? settings.arguments! as DetailRouteArgs
         : const DetailRouteArgs(title: 'Pour Toujours');
-
-    Widget? page;
-    switch (settings.name) {
-      case PourToujoursRouteNames.city:
-        final payload = args.payload;
-        final cityId = payload is CityRoutePayload
-            ? payload.cityId
-            : payload is String
-                ? payload
-                : args.title.toLowerCase();
-        final selectedViewer = payload is CityRoutePayload
-            ? payload.viewerName
-            : args.viewerName ?? viewerName;
-        page = CityExperienceScreen(
-          initialCityId: cityId,
-          viewerName: selectedViewer,
-        );
-      case PourToujoursRouteNames.hourlyWeather:
-      case PourToujoursRouteNames.dailyWeather:
-        if (args.payload is HourlyRoutePayload) {
-          page = HourlyForecastScreen(
-            payload: args.payload! as HourlyRoutePayload,
-          );
-        }
-      case PourToujoursRouteNames.weatherCompare:
-        page = WeatherComparisonScreen(
-          viewerName: args.viewerName ?? viewerName,
-        );
-      case PourToujoursRouteNames.alert:
-        if (args.payload is FamilyWeatherAlert) {
-          page = AlertDetailScreen(
-            alert: args.payload! as FamilyWeatherAlert,
-          );
-        }
-      case PourToujoursRouteNames.person:
-      case PourToujoursRouteNames.overlapPlanner:
-      case PourToujoursRouteNames.holiday:
-      case PourToujoursRouteNames.birthday:
-      case PourToujoursRouteNames.themePreview:
-        page = _FoundationDetailPage(args: args);
-    }
-
+    final page = _pageFor(settings.name, args);
     if (page == null) return null;
     return PageRouteBuilder<void>(
       settings: settings,
       transitionDuration: const Duration(milliseconds: 260),
       reverseTransitionDuration: const Duration(milliseconds: 210),
-      pageBuilder: (_, animation, secondaryAnimation) => page!,
+      pageBuilder: (_, animation, secondaryAnimation) => page,
       transitionsBuilder: (_, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
           parent: animation,
@@ -102,6 +61,54 @@ abstract final class PourToujoursRoutes {
         );
       },
     );
+  }
+
+  static Widget? _pageFor(String? name, DetailRouteArgs args) {
+    if (name == PourToujoursRouteNames.city) {
+      final payload = args.payload;
+      final cityId = payload is CityRoutePayload
+          ? payload.cityId
+          : payload is String
+              ? payload
+              : args.title.toLowerCase();
+      final selectedViewer = payload is CityRoutePayload
+          ? payload.viewerName
+          : args.viewerName ?? viewerName;
+      return CityExperienceScreen(
+        initialCityId: cityId,
+        viewerName: selectedViewer,
+      );
+    }
+    if (name == PourToujoursRouteNames.hourlyWeather ||
+        name == PourToujoursRouteNames.dailyWeather) {
+      if (args.payload is HourlyRoutePayload) {
+        return HourlyForecastScreen(
+          payload: args.payload! as HourlyRoutePayload,
+        );
+      }
+      return _FoundationDetailPage(args: args);
+    }
+    if (name == PourToujoursRouteNames.weatherCompare) {
+      return WeatherComparisonScreen(
+        viewerName: args.viewerName ?? viewerName,
+      );
+    }
+    if (name == PourToujoursRouteNames.alert) {
+      if (args.payload is FamilyWeatherAlert) {
+        return AlertDetailScreen(
+          alert: args.payload! as FamilyWeatherAlert,
+        );
+      }
+      return _FoundationDetailPage(args: args);
+    }
+    const placeholders = {
+      PourToujoursRouteNames.person,
+      PourToujoursRouteNames.overlapPlanner,
+      PourToujoursRouteNames.holiday,
+      PourToujoursRouteNames.birthday,
+      PourToujoursRouteNames.themePreview,
+    };
+    return placeholders.contains(name) ? _FoundationDetailPage(args: args) : null;
   }
 }
 
