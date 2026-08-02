@@ -131,42 +131,40 @@ class _NotificationControlScreenState
                 ),
                 const SizedBox(height: 12),
                 Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: const Text('Quiet hours'),
-                        subtitle: Text(
-                          '${_hour(p.quietStartHour)} – ${_hour(p.quietEndHour)}',
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Quiet hours'),
+                          subtitle: Text(
+                            '${_hour(p.quietStartHour)} – ${_hour(p.quietEndHour)}',
+                          ),
                         ),
-                      ),
-                      RangeSlider(
-                        min: 0,
-                        max: 23,
-                        divisions: 23,
-                        labels: RangeLabels(
-                          _hour(p.quietStartHour),
-                          _hour(p.quietEndHour),
+                        _HourControl(
+                          label: 'Starts',
+                          value: p.quietStartHour,
+                          enabled: p.enabled,
+                          formatter: _hour,
+                          onChanged: (value) =>
+                              _update(p.copyWith(quietStartHour: value)),
                         ),
-                        values: RangeValues(
-                          p.quietStartHour.toDouble(),
-                          p.quietEndHour.toDouble(),
+                        _HourControl(
+                          label: 'Ends',
+                          value: p.quietEndHour,
+                          enabled: p.enabled,
+                          formatter: _hour,
+                          onChanged: (value) =>
+                              _update(p.copyWith(quietEndHour: value)),
                         ),
-                        onChanged: p.enabled
-                            ? (value) => _update(
-                                  p.copyWith(
-                                    quietStartHour: value.start.round(),
-                                    quietEndHour: value.end.round(),
-                                  ),
-                                )
-                            : null,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Text(
-                          'Urgent official alerts may still be shown prominently when enabled and allowed by Android.',
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Overnight quiet periods are supported. Urgent official alerts may still be shown prominently when enabled and allowed by Android.',
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -180,6 +178,41 @@ class _NotificationControlScreenState
     if (hour == 12) return '12 PM';
     return '${hour - 12} PM';
   }
+}
+
+class _HourControl extends StatelessWidget {
+  const _HourControl({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.formatter,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final bool enabled;
+  final String Function(int) formatter;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(child: Text(label)),
+          DropdownButton<int>(
+            value: value,
+            onChanged: enabled
+                ? (next) {
+                    if (next != null) onChanged(next);
+                  }
+                : null,
+            items: [
+              for (var hour = 0; hour < 24; hour++)
+                DropdownMenuItem(value: hour, child: Text(formatter(hour))),
+            ],
+          ),
+        ],
+      );
 }
 
 class _Toggle extends StatelessWidget {
