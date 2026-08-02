@@ -8,6 +8,7 @@ import 'package:pour_toujours/core/alerts/weather_alert_service.dart';
 import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
+import 'package:pour_toujours/data/family_seed.dart';
 import 'package:pour_toujours/features/city/city_experience.dart';
 import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
 
