@@ -16,7 +16,7 @@ import '../../data/family_seed.dart';
 import '../navigation/detail_placeholders.dart';
 import '../people/people_calendar_experience.dart';
 import '../settings/settings_screen.dart';
-import '../today/simple_today_screen.dart';
+import '../today/atlas_today_screen.dart';
 
 class PremiumHomeScreenV3 extends StatefulWidget {
   const PremiumHomeScreenV3({
@@ -152,7 +152,7 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3>
         ),
     };
     final pages = [
-      SimpleTodayScreen(
+      AtlasTodayScreen(
         viewer: viewer,
         snapshots: snapshots,
         weatherFutures: _weatherFutures,
