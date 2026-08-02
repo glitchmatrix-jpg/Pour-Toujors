@@ -9,7 +9,7 @@ import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/data/family_seed.dart';
-import 'package:pour_toujours/features/city/city_experience.dart';
+import 'package:pour_toujours/features/city/city_experience_final.dart';
 import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
 
 void main() {
@@ -118,6 +118,26 @@ void main() {
     WeatherAlertService.debugOfficialOverrides = null;
   });
 
+  test('celestial path uses the sun during daylight and moon at night', () {
+    final sunrise = DateTime(2026, 8, 2, 6);
+    final sunset = DateTime(2026, 8, 2, 18);
+    final noon = celestialPosition(
+      now: DateTime(2026, 8, 2, 12),
+      sunrise: sunrise,
+      sunset: sunset,
+    );
+    expect(noon.body, CelestialBody.sun);
+    expect(noon.progress, closeTo(.5, .001));
+
+    final midnight = celestialPosition(
+      now: DateTime(2026, 8, 3),
+      sunrise: sunrise,
+      sunset: sunset,
+    );
+    expect(midnight.body, CelestialBody.moon);
+    expect(midnight.progress, closeTo(.5, .001));
+  });
+
   Future<void> pumpCity(
     WidgetTester tester, {
     String cityId = 'karachi',
@@ -162,6 +182,7 @@ void main() {
     await pumpCity(tester, size: const Size(360, 640));
     expect(find.text('Karachi'), findsWidgets);
     expect(find.text('The city’s light'), findsOneWidget);
+    expect(find.byKey(const ValueKey('celestial-arc')), findsOneWidget);
     await revealForecast(tester);
     expect(find.text('Seven-day forecast'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
@@ -173,8 +194,20 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Chiba'));
     await tester.pumpAndSettle();
     expect(find.text('Chiba'), findsWidgets);
-    await revealForecast(tester);
-    expect(find.text('Seven-day forecast'), findsOneWidget);
+    expect(find.byKey(const ValueKey('celestial-arc')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local day uses readable two-hour blocks', (tester) async {
+    await pumpCity(tester);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('local-day-block-timeline')),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const ValueKey('local-day-block-timeline')), findsOneWidget);
+    expect(find.text('Likely free'), findsOneWidget);
+    expect(find.text('Asleep'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -221,10 +254,7 @@ void main() {
       AppSettingsScope(
         controller: AppSettingsController(initial: settings),
         child: MaterialApp(
-          theme: PourToujoursTheme.build(
-            settings.theme,
-            Brightness.light,
-          ),
+          theme: PourToujoursTheme.build(settings.theme, Brightness.light),
           home: HourlyForecastScreen(
             payload: HourlyRoutePayload(
               city: const FamilyCity(
@@ -247,14 +277,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('comparison matrix includes every city', (tester) async {
+  testWidgets('comparison includes every city', (tester) async {
     await pumpCity(tester);
-    await revealForecast(tester);
-    await tester.tap(find.byIcon(Icons.view_agenda_outlined));
-    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Compare all four cities'),
-      500,
+      600,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(find.text('Compare all four cities'));
