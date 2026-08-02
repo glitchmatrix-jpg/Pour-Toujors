@@ -135,14 +135,16 @@ class SettingsScreen extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(child: Text(viewerInitials)),
                 title: Text('Using Pour Toujours as $viewerName'),
-                subtitle: const Text('Identity and preferences stay on this device.'),
+                subtitle: const Text(
+                  'Identity and preferences stay on this device.',
+                ),
               ),
               const Divider(),
-              ListTile(
+              const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.shield_outlined),
-                title: const Text('Privacy promise'),
-                subtitle: const Text(
+                leading: Icon(Icons.shield_outlined),
+                title: Text('Privacy promise'),
+                subtitle: Text(
                   'No GPS, background location, or live activity tracking. Availability is routine-based and explainable.',
                 ),
               ),
@@ -165,17 +167,19 @@ class SettingsScreen extends StatelessWidget {
 
 class _Section extends StatelessWidget {
   const _Section({required this.title, required this.child});
+
   final String title;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: context.pt.card,
+    return Material(
+      color: context.pt.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.pt.outline),
+        side: BorderSide(color: context.pt.outline),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -220,7 +224,9 @@ class _ChoiceTile<T> extends StatelessWidget {
             DropdownMenuItem(value: entry.key, child: Text(entry.value)),
         ],
         onChanged: (next) {
-          if (next != null) onChanged(next);
+          if (next != null) {
+            onChanged(next);
+          }
         },
       ),
     );
