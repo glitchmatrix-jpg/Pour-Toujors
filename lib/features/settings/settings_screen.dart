@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/pour_toujours_theme.dart';
 import '../../core/settings/app_settings.dart';
+import 'v1_release_center.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -19,14 +20,13 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppSettingsScope.of(context);
     final settings = controller.value;
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
       children: [
         Text('Settings', style: Theme.of(context).textTheme.displaySmall),
         const SizedBox(height: 6),
         Text(
-          'Make Pour Toujours feel like yours.',
+          'Appearance, reminders, accessibility, and trust.',
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: context.pt.secondaryText,
               ),
@@ -120,7 +120,9 @@ class SettingsScreen extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: settings.reducedMotion,
             title: const Text('Reduce motion'),
-            subtitle: const Text('Limits ambient and route animations.'),
+            subtitle: const Text(
+              'Disables decorative movement and shortens transitions.',
+            ),
             onChanged: (value) => controller.update(
               settings.copyWith(reducedMotion: value),
             ),
@@ -128,7 +130,35 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _Section(
-          title: 'Profile and privacy',
+          title: 'Reminders and trust',
+          child: Column(
+            children: [
+              _RouteTile(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notifications',
+                subtitle: 'Opt-in reminders, severity, and quiet hours.',
+                builder: (_) => const NotificationControlScreen(),
+              ),
+              const Divider(),
+              _RouteTile(
+                icon: Icons.shield_outlined,
+                title: 'Privacy and trust',
+                subtitle: 'What the app does—and deliberately does not do.',
+                builder: (_) => const PrivacyTrustScreen(),
+              ),
+              const Divider(),
+              _RouteTile(
+                icon: Icons.info_outline_rounded,
+                title: 'Sources and licenses',
+                subtitle: 'Public providers, acknowledgements, and version.',
+                builder: (_) => const AttributionScreen(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _Section(
+          title: 'Profile',
           child: Column(
             children: [
               ListTile(
@@ -136,16 +166,7 @@ class SettingsScreen extends StatelessWidget {
                 leading: CircleAvatar(child: Text(viewerInitials)),
                 title: Text('Using Pour Toujours as $viewerName'),
                 subtitle: const Text(
-                  'Identity and preferences stay on this device.',
-                ),
-              ),
-              const Divider(),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.shield_outlined),
-                title: Text('Privacy promise'),
-                subtitle: Text(
-                  'No GPS, background location, or live activity tracking. Availability is routine-based and explainable.',
+                  'Identity and family preferences stay on this device.',
                 ),
               ),
               const SizedBox(height: 8),
@@ -165,6 +186,30 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+class _RouteTile extends StatelessWidget {
+  const _RouteTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.builder,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final WidgetBuilder builder;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: builder)),
+      );
+}
+
 class _Section extends StatelessWidget {
   const _Section({required this.title, required this.child});
 
@@ -172,27 +217,25 @@ class _Section extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: context.pt.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: context.pt.outline),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 14),
-            child,
-          ],
+  Widget build(BuildContext context) => Material(
+        color: context.pt.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: context.pt.outline),
         ),
-      ),
-    );
-  }
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 14),
+              child,
+            ],
+          ),
+        ),
+      );
 }
 
 class _ChoiceTile<T> extends StatelessWidget {
@@ -211,26 +254,22 @@ class _ChoiceTile<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: DropdownButton<T>(
-        value: value,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (final entry in choices.entries)
-            DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-        ],
-        onChanged: (next) {
-          if (next != null) {
-            onChanged(next);
-          }
-        },
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: DropdownButton<T>(
+          value: value,
+          underline: const SizedBox.shrink(),
+          items: [
+            for (final entry in choices.entries)
+              DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+          ],
+          onChanged: (next) {
+            if (next != null) onChanged(next);
+          },
+        ),
+      );
 }
 
 class _ThemePreview extends StatelessWidget {
@@ -260,7 +299,7 @@ class _ThemePreview extends StatelessWidget {
     return Semantics(
       selected: selected,
       button: true,
-      label: '$label theme',
+      label: '$label theme${selected ? ', selected' : ''}',
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
