@@ -9,6 +9,7 @@ import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
+import 'package:pour_toujours/features/today/ambient_sky.dart';
 
 void main() {
   setUpAll(tz.initializeTimeZones);
@@ -165,24 +166,27 @@ void main() {
     Size(1440, 900),
   ]) {
     testWidgets(
-      'Foundation is clean at ${size.width}x${size.height}',
+      'Living Today is clean at ${size.width}x${size.height}',
       (tester) async {
         await pumpHome(tester, size);
         expect(find.textContaining('Good '), findsOneWidget);
+        expect(find.text('Four places, one shared day.'), findsOneWidget);
         expectClean(tester);
 
-        final mainList = find.byType(ListView).first;
+        final mainScroll = find.byType(Scrollable).first;
         await tester.scrollUntilVisible(
-          find.text('Family now'),
+          find.text('Family pulse'),
           220,
-          scrollable: mainList,
+          scrollable: mainScroll,
         );
-        await tester.pumpAndSettle();
-        expect(find.text('Family now'), findsOneWidget);
+        expect(find.text('Family pulse'), findsOneWidget);
         expectClean(tester);
 
-        await tester.drag(mainList, const Offset(0, -900));
-        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('City conditions'),
+          320,
+          scrollable: mainScroll,
+        );
         expect(find.textContaining('31'), findsWidgets);
         expectClean(tester);
       },
@@ -221,14 +225,15 @@ void main() {
     await tester.pump();
     expect(controller.value.theme, PtThemeCollection.cherryCola);
 
-    final settingsList = find.byType(ListView).first;
+    final settingsScroll = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
       find.text('Reduce motion'),
       240,
-      scrollable: settingsList,
+      scrollable: settingsScroll,
     );
-    await tester.drag(settingsList, const Offset(0, -120));
-    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(SwitchListTile, 'Reduce motion'),
+    );
     await tester.tap(find.widgetWithText(SwitchListTile, 'Reduce motion'));
     await tester.pump();
 
@@ -255,6 +260,54 @@ void main() {
     expectClean(tester);
   });
 
+  testWidgets('City nodes and shared-time ribbon are interactive', (
+    tester,
+  ) async {
+    await pumpHome(tester, const Size(390, 844));
+    expect(find.text('Karachi'), findsWidgets);
+    await tester.tap(find.text('Karachi').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Karachi'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    final mainScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Next 24 hours'),
+      300,
+      scrollable: mainScroll,
+    );
+    final horizontal = find.byWidgetPredicate(
+      (widget) => widget is SingleChildScrollView &&
+          widget.scrollDirection == Axis.horizontal,
+    );
+    expect(horizontal, findsWidgets);
+    await tester.drag(horizontal.first, const Offset(-300, 0));
+    await tester.pump();
+    expectClean(tester);
+  });
+
+  test('Ambient sky classifies common weather states', () {
+    final clear = fixture('clear').current;
+    expect(ambientSkyKindFor(clear, null), AmbientSkyKind.partlyCloudyDay);
+    expect(
+      ambientSkyKindFor(fixture('rain', code: 61).current, null),
+      AmbientSkyKind.rain,
+    );
+    expect(
+      ambientSkyKindFor(fixture('storm', code: 95).current, null),
+      AmbientSkyKind.thunderstorm,
+    );
+    expect(
+      ambientSkyKindFor(fixture('fog', code: 45).current, null),
+      AmbientSkyKind.fog,
+    );
+    expect(
+      ambientSkyKindFor(fixture('night', day: false, code: 0).current, null),
+      AmbientSkyKind.clearNight,
+    );
+  });
+
   testWidgets('Large text and reduced motion remain usable', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -268,6 +321,7 @@ void main() {
         child: MediaQuery(
           data: const MediaQueryData(
             textScaler: TextScaler.linear(1.5),
+            disableAnimations: true,
           ),
           child: MaterialApp(
             theme: PourToujoursTheme.build(
@@ -283,6 +337,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Four places, one shared day.'), findsOneWidget);
     expectClean(tester);
   });
 }
