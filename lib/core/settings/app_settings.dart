@@ -6,6 +6,21 @@ enum TemperatureUnit { celsius, fahrenheit }
 enum WindUnit { kilometersPerHour, milesPerHour }
 enum ClockFormat { twelveHour, twentyFourHour }
 
+class CupertinoPageTransitionsBuilder extends PageTransitionsBuilder {
+  const CupertinoPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return FadeTransition(opacity: animation, child: child);
+  }
+}
+
 class AppSettings {
   const AppSettings({
     this.theme = PtThemeCollection.evergreen,
@@ -49,20 +64,30 @@ class AppSettingsController extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _value = AppSettings(
-      theme: PtThemeCollection.values.byName(
-        prefs.getString('themeCollection') ?? PtThemeCollection.evergreen.name,
+      theme: _enumValue(
+        PtThemeCollection.values,
+        prefs.getString('themeCollection'),
+        PtThemeCollection.evergreen,
       ),
-      themeMode: ThemeMode.values.byName(
-        prefs.getString('themeMode') ?? ThemeMode.system.name,
+      themeMode: _enumValue(
+        ThemeMode.values,
+        prefs.getString('themeMode'),
+        ThemeMode.system,
       ),
-      temperatureUnit: TemperatureUnit.values.byName(
-        prefs.getString('temperatureUnit') ?? TemperatureUnit.celsius.name,
+      temperatureUnit: _enumValue(
+        TemperatureUnit.values,
+        prefs.getString('temperatureUnit'),
+        TemperatureUnit.celsius,
       ),
-      windUnit: WindUnit.values.byName(
-        prefs.getString('windUnit') ?? WindUnit.kilometersPerHour.name,
+      windUnit: _enumValue(
+        WindUnit.values,
+        prefs.getString('windUnit'),
+        WindUnit.kilometersPerHour,
       ),
-      clockFormat: ClockFormat.values.byName(
-        prefs.getString('clockFormat') ?? ClockFormat.twelveHour.name,
+      clockFormat: _enumValue(
+        ClockFormat.values,
+        prefs.getString('clockFormat'),
+        ClockFormat.twelveHour,
       ),
       reducedMotion: prefs.getBool('reducedMotion') ?? false,
     );
@@ -81,6 +106,17 @@ class AppSettingsController extends ChangeNotifier {
       prefs.setString('clockFormat', next.clockFormat.name),
       prefs.setBool('reducedMotion', next.reducedMotion),
     ]);
+  }
+
+  static T _enumValue<T extends Enum>(
+    List<T> values,
+    String? stored,
+    T fallback,
+  ) {
+    for (final value in values) {
+      if (value.name == stored) return value;
+    }
+    return fallback;
   }
 }
 
