@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/theme/pour_toujours_theme.dart';
-import 'family_seed.dart';
 
 enum FamilyGender { female, male, unspecified }
 
