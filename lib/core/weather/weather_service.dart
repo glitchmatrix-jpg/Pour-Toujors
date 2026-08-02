@@ -60,20 +60,27 @@ class WeatherService {
     'hattiesburg': (31.3271, -89.2903),
   };
 
+  /// Test-only deterministic values. Production leaves this null.
+  static Map<String, CityWeather>? debugOverrides;
+
   Future<CityWeather> fetch(String cityId) async {
+    final override = debugOverrides?[cityId];
+    if (override != null) return override;
+
     try {
       final point = coordinates[cityId]!;
       final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
         'latitude': '${point.$1}',
         'longitude': '${point.$2}',
-        'current': 'temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m',
+        'current':
+            'temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m',
         'hourly': 'precipitation_probability',
         'daily': 'temperature_2m_max,temperature_2m_min,sunrise,sunset',
         'forecast_days': '1',
         'timezone': 'auto',
       });
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return _offline(cityId);
+      if (response.statusCode != 200) return _offline();
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final current = data['current'] as Map<String, dynamic>;
       final daily = data['daily'] as Map<String, dynamic>;
@@ -87,16 +94,17 @@ class WeatherService {
         isDay: (current['is_day'] as num).toInt() == 1,
         high: ((daily['temperature_2m_max'] as List).first as num).toDouble(),
         low: ((daily['temperature_2m_min'] as List).first as num).toDouble(),
-        rainChance: rain.isEmpty ? 0 : rain.reduce((a, b) => a > b ? a : b).toInt(),
+        rainChance:
+            rain.isEmpty ? 0 : rain.reduce((a, b) => a > b ? a : b).toInt(),
         sunrise: DateTime.parse((daily['sunrise'] as List).first as String),
         sunset: DateTime.parse((daily['sunset'] as List).first as String),
       );
     } catch (_) {
-      return _offline(cityId);
+      return _offline();
     }
   }
 
-  CityWeather _offline(String cityId) {
+  CityWeather _offline() {
     final now = DateTime.now();
     return CityWeather(
       temperature: 0,
