@@ -6,6 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'package:pour_toujours/app/theme/pour_toujours_theme.dart';
 import 'package:pour_toujours/core/release/v1_platform_services.dart';
+import 'package:pour_toujours/core/settings/app_settings.dart';
 import 'package:pour_toujours/features/settings/v1_release_center.dart';
 
 void main() {
