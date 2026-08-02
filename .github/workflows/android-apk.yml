@@ -11,7 +11,15 @@ on:
         options: [debug, release, both]
   push:
     branches: [agent/initial-product-foundation]
-    paths: ["lib/**", "assets/**", "android/**", "test/**", "pubspec.yaml", "pubspec.lock", "analysis_options.yaml", ".github/workflows/android-apk.yml"]
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "android/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - ".github/workflows/android-apk.yml"
   pull_request:
     branches: [main]
 
@@ -31,6 +39,7 @@ jobs:
     name: Validate and build APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -51,30 +60,54 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
-            flutter create --platforms=android --org com.pourtoujours --project-name pour_toujours .
+            flutter create \
+              --platforms=android \
+              --org com.pourtoujours \
+              --project-name pour_toujours \
+              .
           fi
+
           rm -f test/widget_test.dart
+
           python3 - <<'PY'
           from pathlib import Path
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           text = manifest.read_text(encoding='utf-8')
+
           permission = '<uses-permission android:name="android.permission.INTERNET" />'
           if permission not in text:
-              text = text.replace(
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission,
-              )
-          text = text.replace('android:label="pour_toujours"', 'android:label="Pour Toujours"')
-          text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_pour_toujours"')
+              needle = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+              if needle not in text:
+                  raise RuntimeError('Android manifest root was not recognized.')
+              text = text.replace(needle, needle + '\n    ' + permission, 1)
+
+          if 'android:label="pour_toujours"' not in text and 'android:label="Pour Toujours"' not in text:
+              raise RuntimeError('Android application label was not found.')
+          text = text.replace(
+              'android:label="pour_toujours"',
+              'android:label="Pour Toujours"',
+              1,
+          )
+
+          if 'android:icon="@mipmap/ic_launcher"' not in text and 'android:icon="@drawable/ic_pour_toujours"' not in text:
+              raise RuntimeError('Android launcher icon attribute was not found.')
+          text = text.replace(
+              'android:icon="@mipmap/ic_launcher"',
+              'android:icon="@drawable/ic_pour_toujours"',
+              1,
+          )
           manifest.write_text(text, encoding='utf-8')
 
           drawable = Path('android/app/src/main/res/drawable/ic_pour_toujours.xml')
           drawable.write_text('''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp" android:height="108dp"
-              android:viewportWidth="108" android:viewportHeight="108">
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
             <path android:fillColor="#0A3033" android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8"/>
             <path android:fillColor="#69B6AE" android:pathData="M54,20A34,34 0,1 0,54 88A34,34 0,1 0,54 20"/>
             <path android:fillColor="#0B3A43" android:pathData="M33,31L44,25L53,31L49,40L39,43L33,31M57,53L68,42L83,47L82,59L72,66L65,78L55,74L50,63L57,53M32,62L42,65L47,77L38,82L29,73L32,62"/>
@@ -86,21 +119,41 @@ jobs:
 
           screen = Path('lib/features/home/premium_home_screen_v2.dart')
           source = screen.read_text(encoding='utf-8')
-          source = source.replace(
-              "city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 10,",
-              "city.name == 'Hattiesburg' ? 'H’burg' : city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 9,",
-              1,
-          )
-          source = source.replace(
-              'height: 120,\n      child: ListView.separated(',
-              'height: 134,\n      child: ListView.separated(',
-              1,
-          )
-          source = source.replace(
-              'else if (weather == null)',
-              'else if (weather == null || !weather.isLive)',
-              1,
-          )
+
+          replacements = [
+              (
+                  "city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 10,",
+                  "city.name == 'Hattiesburg' ? 'H’burg' : city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 9,",
+                  'compact world footer',
+              ),
+              (
+                  'height: 220,\n          clipBehavior: Clip.antiAlias,',
+                  'height: 244,\n          clipBehavior: Clip.antiAlias,',
+                  'live weather card height',
+              ),
+              (
+                  'height: 120,\n      child: ListView.separated(',
+                  'height: 134,\n      child: ListView.separated(',
+                  'birthday rail height',
+              ),
+              (
+                  'else if (weather == null)',
+                  'else if (weather == null || !weather.isLive)',
+                  'offline weather guard',
+              ),
+          ]
+
+          for old, new, label in replacements:
+              if new in source:
+                  continue
+              count = source.count(old)
+              if count != 1:
+                  raise RuntimeError(
+                      f'Expected one {label} target, found {count}. '
+                      'Refusing to build an unverified UI.'
+                  )
+              source = source.replace(old, new, 1)
+
           screen.write_text(source, encoding='utf-8')
           PY
 
@@ -108,14 +161,23 @@ jobs:
         run: flutter pub get
 
       - name: Format checked sources
-        run: dart format lib test 2>/dev/null || dart format lib
+        run: dart format lib test
 
       - name: Static analysis
         run: flutter analyze --fatal-infos --fatal-warnings
 
-      - name: Run mobile QA tests
-        shell: bash
+      - name: Run deterministic mobile QA tests
         run: flutter test --reporter expanded
+
+      - name: Verify release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'android:label="Pour Toujours"' android/app/src/main/AndroidManifest.xml
+          grep -F 'android:icon="@drawable/ic_pour_toujours"' android/app/src/main/AndroidManifest.xml
+          grep -F '<uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+          test -s android/app/src/main/res/drawable/ic_pour_toujours.xml
+          test -s assets/brand/pour_toujours_mark.svg
 
       - name: Build debug APK
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
@@ -129,10 +191,15 @@ jobs:
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
           find build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
           if compgen -G 'dist/*.apk' > /dev/null; then
             (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+            ls -lh dist
+            cat dist/SHA256SUMS.txt
+          else
+            echo "No APK was produced. A required QA or build step failed."
           fi
 
       - name: Upload debug APK
@@ -143,6 +210,7 @@ jobs:
           path: |
             dist/app-debug.apk
             dist/SHA256SUMS.txt
+          if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
@@ -154,5 +222,6 @@ jobs:
           path: |
             dist/app-release.apk
             dist/SHA256SUMS.txt
+          if-no-files-found: error
           retention-days: 14
           compression-level: 0
