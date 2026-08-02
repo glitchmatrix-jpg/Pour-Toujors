@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -39,7 +40,6 @@ class CityExperienceScreen extends StatefulWidget {
     required this.initialCityId,
     required this.viewerName,
   });
-
   final String initialCityId;
   final String viewerName;
 
@@ -48,8 +48,8 @@ class CityExperienceScreen extends StatefulWidget {
 }
 
 class _CityExperienceScreenState extends State<CityExperienceScreen> {
-  final _weather = WeatherService();
-  final _alerts = WeatherAlertService();
+  final WeatherService _weather = WeatherService();
+  final WeatherAlertService _alerts = WeatherAlertService();
   late String _cityId;
   late Future<_CityData> _future;
   bool _verticalForecast = false;
@@ -58,18 +58,17 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
   void initState() {
     super.initState();
     _cityId = widget.initialCityId;
-    _load();
+    _reload();
   }
 
-  void _load({bool force = false}) {
+  void _reload({bool force = false}) {
     _future = Future.wait<Object>([
       _weather.fetchBundle(_cityId, forceRefresh: force),
       _alerts.fetchOfficialForCity(_cityId),
     ]).then((values) {
-      final bundle = values[0] as WeatherBundle;
-      final official = values[1] as List<FamilyWeatherAlert>;
-      final derived = _alerts.derive(_cityId, bundle);
-      return _CityData(bundle, [...official, ...derived]);
+      final bundle = values.first as WeatherBundle;
+      final official = values.last as List<FamilyWeatherAlert>;
+      return _CityData(bundle, [...official, ..._alerts.derive(_cityId, bundle)]);
     });
   }
 
@@ -77,7 +76,7 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
     if (id == _cityId) return;
     setState(() {
       _cityId = id;
-      _load();
+      _reload();
     });
   }
 
@@ -103,21 +102,27 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
           }
           if (!snapshot.hasData) {
             return SafeArea(
-              child: PtEmptyState(
-                title: '${city.name} weather is unavailable',
-                message:
-                    'The city route is still available. Retry when a connection returns.',
-                icon: Icons.cloud_off_outlined,
-                action: FilledButton(
-                  onPressed: () => setState(() => _load(force: true)),
-                  child: const Text('Retry'),
-                ),
+              child: ListView(
+                padding: const EdgeInsets.all(24),
+                children: [
+                  PtEmptyState(
+                    title: '${city.name} weather is unavailable',
+                    message:
+                        'The city route remains usable. Retry when a connection returns.',
+                    icon: Icons.cloud_off_outlined,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => setState(() => _reload(force: true)),
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
             );
           }
           final data = snapshot.data!;
           return RefreshIndicator(
-            onRefresh: () async => setState(() => _load(force: true)),
+            onRefresh: () async => setState(() => _reload(force: true)),
             child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
@@ -126,7 +131,6 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
                     viewer: viewer,
                     bundle: data.bundle,
                     alerts: data.alerts,
-                    onBack: () => Navigator.maybePop(context),
                   ),
                 ),
                 SliverPadding(
@@ -141,11 +145,7 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
                       const SizedBox(height: 24),
                       const PtSectionHeader('The city’s light'),
                       const SizedBox(height: 10),
-                      _DaylightArc(
-                        city: city,
-                        viewerCity: _city(viewer.cityId),
-                        bundle: data.bundle,
-                      ),
+                      _DaylightArc(city: city, bundle: data.bundle),
                       const SizedBox(height: 24),
                       PtSectionHeader(
                         'Seven-day forecast',
@@ -161,8 +161,9 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
                             ),
                           ],
                           selected: {_verticalForecast},
-                          onSelectionChanged: (value) =>
-                              setState(() => _verticalForecast = value.first),
+                          onSelectionChanged: (value) {
+                            setState(() => _verticalForecast = value.first);
+                          },
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -181,20 +182,19 @@ class _CityExperienceScreenState extends State<CityExperienceScreen> {
                       const SizedBox(height: 10),
                       _CityPeople(city: city, viewer: viewer),
                       const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.pushNamed(
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pushNamed(
                             context,
                             PourToujoursRouteNames.weatherCompare,
                             arguments: DetailRouteArgs(
                               title: 'Compare family weather',
                               viewerName: viewer.name,
                             ),
-                          ),
-                          icon: const Icon(Icons.compare_arrows_rounded),
-                          label: const Text('Compare all four cities'),
-                        ),
+                          );
+                        },
+                        icon: const Icon(Icons.compare_arrows_rounded),
+                        label: const Text('Compare all four cities'),
                       ),
                       if (data.bundle.isStale) ...[
                         const SizedBox(height: 12),
@@ -231,14 +231,11 @@ class _CityHero extends StatelessWidget {
     required this.viewer,
     required this.bundle,
     required this.alerts,
-    required this.onBack,
   });
-
   final FamilyCity city;
   final FamilyMember viewer;
   final WeatherBundle bundle;
   final List<FamilyWeatherAlert> alerts;
-  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -257,28 +254,29 @@ class _CityHero extends StatelessWidget {
           '${city.name}, ${bundle.condition}, ${settings.temperature(current.temperature)}. ${members.length} family members.',
       child: Stack(
         children: [
-          Positioned.fill(child: CustomPaint(painter: _CityIdentityPainter(city.id))),
+          Positioned.fill(
+            child: CustomPaint(painter: _CityIdentityPainter(city.id)),
+          ),
           Positioned(
             top: MediaQuery.paddingOf(context).top + 8,
             left: 10,
             child: IconButton.filledTonal(
-              onPressed: onBack,
+              onPressed: () => Navigator.maybePop(context),
               icon: const Icon(Icons.arrow_back_rounded),
             ),
           ),
-          Positioned(
-            top: MediaQuery.paddingOf(context).top + 8,
-            right: 10,
-            child: alerts.isEmpty
-                ? const SizedBox.shrink()
-                : Badge(
-                    label: Text('${alerts.length}'),
-                    child: IconButton.filledTonal(
-                      onPressed: () => _openAlert(context, _highestAlert(alerts)),
-                      icon: const Icon(Icons.warning_amber_rounded),
-                    ),
-                  ),
-          ),
+          if (alerts.isNotEmpty)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 10,
+              child: Badge(
+                label: Text('${alerts.length}'),
+                child: IconButton.filledTonal(
+                  onPressed: () => _openAlert(context, _highestAlert(alerts)),
+                  icon: const Icon(Icons.warning_amber_rounded),
+                ),
+              ),
+            ),
           Positioned(
             left: 20,
             right: 20,
@@ -401,11 +399,14 @@ class _AlertBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final tornadoWarning = alert.source == WeatherAlertSource.official &&
         alert.event.toLowerCase().contains('tornado warning');
-    final color = tornadoWarning || alert.severity == WeatherAlertSeverity.extreme
-        ? context.pt.danger
+    final color = tornadoWarning ||
+            alert.severity == WeatherAlertSeverity.extreme
+        ? context.pt.warning
         : alert.source == WeatherAlertSource.official
             ? context.pt.warning
             : context.pt.accent;
+    final shelterSupported = tornadoWarning &&
+        alert.instruction.toLowerCase().contains('seek shelter');
     return Material(
       color: color.withValues(alpha: .12),
       shape: RoundedRectangleBorder(
@@ -440,8 +441,7 @@ class _AlertBanner extends StatelessWidget {
                       alert.headline,
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    if (tornadoWarning &&
-                        alert.instruction.toLowerCase().contains('seek shelter'))
+                    if (shelterSupported)
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
                         child: Text(
@@ -473,13 +473,8 @@ class _AlertBanner extends StatelessWidget {
 }
 
 class _DaylightArc extends StatelessWidget {
-  const _DaylightArc({
-    required this.city,
-    required this.viewerCity,
-    required this.bundle,
-  });
+  const _DaylightArc({required this.city, required this.bundle});
   final FamilyCity city;
-  final FamilyCity viewerCity;
   final WeatherBundle bundle;
 
   @override
@@ -488,18 +483,18 @@ class _DaylightArc extends StatelessWidget {
     final local = _localNow(city);
     final dawn = day.sunrise.subtract(const Duration(minutes: 30));
     final dusk = day.sunset.add(const Duration(minutes: 30));
-    final noon = day.sunrise.add(day.daylightDuration ~/ 2);
+    final noon = day.sunrise.add(
+      Duration(seconds: day.daylightDuration.inSeconds ~/ 2),
+    );
     final progress = local.isBefore(day.sunrise)
         ? 0.0
         : local.isAfter(day.sunset)
             ? 1.0
             : local.difference(day.sunrise).inMinutes /
                 math.max(1, day.daylightDuration.inMinutes);
-    final remaining = day.sunset.difference(local);
     final untilSunrise = day.sunrise.isAfter(local)
         ? day.sunrise.difference(local)
         : day.sunrise.add(const Duration(days: 1)).difference(local);
-    final comparison = _daylightComparison(city, viewerCity, bundle);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
       decoration: BoxDecoration(
@@ -511,7 +506,7 @@ class _DaylightArc extends StatelessWidget {
         children: [
           Semantics(
             label:
-                'Sunrise ${DateFormat('h:mm a').format(day.sunrise)}, solar noon ${DateFormat('h:mm a').format(noon)}, sunset ${DateFormat('h:mm a').format(day.sunset)}. ${_duration(day.daylightDuration)} of daylight.',
+                'Dawn ${DateFormat('h:mm a').format(dawn)}, sunrise ${DateFormat('h:mm a').format(day.sunrise)}, solar noon ${DateFormat('h:mm a').format(noon)}, sunset ${DateFormat('h:mm a').format(day.sunset)}, dusk ${DateFormat('h:mm a').format(dusk)}.',
             child: SizedBox(
               height: 145,
               width: double.infinity,
@@ -535,7 +530,7 @@ class _DaylightArc extends StatelessWidget {
             local.isBefore(day.sunrise)
                 ? 'Sunrise in ${_duration(untilSunrise)}'
                 : local.isBefore(day.sunset)
-                    ? 'Sunset in ${_duration(remaining)}'
+                    ? 'Sunset in ${_duration(day.sunset.difference(local))}'
                     : 'Sunrise in ${_duration(untilSunrise)}',
             style: Theme.of(context)
                 .textTheme
@@ -544,7 +539,7 @@ class _DaylightArc extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${_duration(day.daylightDuration)} of daylight · $comparison',
+            '${_duration(day.daylightDuration)} of daylight · ${_daylightElapsed(local, day)}',
             textAlign: TextAlign.center,
             style: TextStyle(color: context.pt.secondaryText),
           ),
@@ -573,7 +568,10 @@ class _TimePoint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: TextStyle(color: context.pt.secondaryText, fontSize: 9)),
+        Text(
+          label,
+          style: TextStyle(color: context.pt.secondaryText, fontSize: 9),
+        ),
         Text(
           DateFormat('HH:mm').format(time),
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10),
@@ -619,17 +617,19 @@ class _SevenDayForecast extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         itemCount: bundle.daily.length,
         separatorBuilder: (_, __) => const SizedBox(width: 9),
-        itemBuilder: (context, index) => SizedBox(
-          width: 144,
-          child: _ForecastDayTile(
-            city: city,
-            bundle: bundle,
-            day: bundle.daily[index],
-            today: index == 0,
-            alert: alerts.firstOrNull,
-            compact: true,
-          ),
-        ),
+        itemBuilder: (context, index) {
+          return SizedBox(
+            width: 144,
+            child: _ForecastDayTile(
+              city: city,
+              bundle: bundle,
+              day: bundle.daily[index],
+              today: index == 0,
+              alert: alerts.firstOrNull,
+              compact: true,
+            ),
+          );
+        },
       ),
     );
   }
@@ -654,6 +654,7 @@ class _ForecastDayTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = AppSettingsScope.of(context).value;
+    final dayAlert = alert;
     return Material(
       color: today ? context.pt.accent.withValues(alpha: .11) : context.pt.card,
       shape: RoundedRectangleBorder(
@@ -662,27 +663,29 @@ class _ForecastDayTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(21),
-        onTap: () => Navigator.pushNamed(
-          context,
-          PourToujoursRouteNames.hourlyWeather,
-          arguments: DetailRouteArgs(
-            title: '${city.name} hourly forecast',
-            payload: HourlyRoutePayload(city: city, bundle: bundle, day: day),
-          ),
-        ),
+        onTap: () {
+          Navigator.pushNamed(
+            context,
+            PourToujoursRouteNames.hourlyWeather,
+            arguments: DetailRouteArgs(
+              title: '${city.name} hourly forecast',
+              payload: HourlyRoutePayload(city: city, bundle: bundle, day: day),
+            ),
+          );
+        },
         child: Padding(
           padding: const EdgeInsets.all(13),
           child: compact
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _forecastContents(context, settings),
+                  children: _contents(context, settings, dayAlert),
                 )
               : Row(
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _forecastContents(context, settings),
+                        children: _contents(context, settings, dayAlert),
                       ),
                     ),
                     const Icon(Icons.chevron_right_rounded),
@@ -693,41 +696,47 @@ class _ForecastDayTile extends StatelessWidget {
     );
   }
 
-  List<Widget> _forecastContents(BuildContext context, AppSettings settings) => [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                today ? 'Today' : DateFormat('EEEE').format(day.date),
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
+  List<Widget> _contents(
+    BuildContext context,
+    AppSettings settings,
+    FamilyWeatherAlert? dayAlert,
+  ) {
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              today ? 'Today' : DateFormat('EEEE').format(day.date),
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
-            if (alert != null && alert.isInterruptive)
-              Icon(Icons.warning_rounded, size: 16, color: context.pt.warning),
-          ],
-        ),
-        const SizedBox(height: 7),
-        Icon(_weatherIcon(day.weatherCode), size: 26),
-        const SizedBox(height: 6),
-        Text(
-          '${settings.temperature(day.high)} / ${settings.temperature(day.low)}',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        Text(
-          '${day.precipitationProbability}% rain · ${day.windMaximum.round()} km/h',
-          style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
-        ),
-        Text(
-          '↑ ${DateFormat('HH:mm').format(day.sunrise)}  ↓ ${DateFormat('HH:mm').format(day.sunset)}',
-          style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
-        ),
-        Text(
-          'UV ${day.uvMaximum.round()} · ${_practicalSummary(day)}',
-          maxLines: compact ? 3 : 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
-        ),
-      ];
+          ),
+          if (dayAlert?.isInterruptive ?? false)
+            Icon(Icons.warning_rounded, size: 16, color: context.pt.warning),
+        ],
+      ),
+      const SizedBox(height: 7),
+      Icon(_weatherIcon(day.weatherCode), size: 26),
+      const SizedBox(height: 6),
+      Text(
+        '${settings.temperature(day.high)} / ${settings.temperature(day.low)}',
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      Text(
+        '${day.precipitationProbability}% rain · ${day.windMaximum.round()} km/h',
+        style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
+      ),
+      Text(
+        '↑ ${DateFormat('HH:mm').format(day.sunrise)}  ↓ ${DateFormat('HH:mm').format(day.sunset)}',
+        style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
+      ),
+      Text(
+        'UV ${day.uvMaximum.round()} · ${_practicalSummary(day)}',
+        maxLines: compact ? 3 : 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: context.pt.secondaryText, fontSize: 10),
+      ),
+    ];
+  }
 }
 
 class _LocalDayTimeline extends StatelessWidget {
@@ -757,7 +766,7 @@ class _LocalDayTimeline extends StatelessWidget {
           const SizedBox(height: 12),
           Semantics(
             label:
-                'Twenty-four hour timeline for ${city.name}, combining daylight, weather, and routine availability.',
+                'Twenty-four hour timeline for ${city.name}, combining daylight, rain chance, and routine availability.',
             child: SizedBox(
               height: 74,
               child: Row(
@@ -778,9 +787,9 @@ class _LocalDayTimeline extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text('12a', style: TextStyle(fontSize: 9)),
               Text('6a', style: TextStyle(fontSize: 9)),
               Text('12p', style: TextStyle(fontSize: 9)),
@@ -826,7 +835,11 @@ class _DayCell extends StatelessWidget {
     );
     final daylight = instant.isAfter(day.sunrise) && instant.isBefore(day.sunset);
     final free = members.where((member) {
-      return evaluateAvailability(member: member, city: city, now: instant).kind ==
+      return evaluateAvailability(
+            member: member,
+            city: city,
+            now: instant,
+          ).kind ==
           AvailabilityKind.likelyFree;
     }).length;
     final rain = (hourly?.precipitationProbability ?? 0) / 100;
@@ -894,16 +907,18 @@ class _PersonPreview extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        onTap: () => Navigator.pushNamed(
-          context,
-          PourToujoursRouteNames.person,
-          arguments: DetailRouteArgs(
-            title: member.name,
-            subtitle: relationshipFor(viewer: viewer, person: member),
-            payload: member.name,
-            viewerName: viewer.name,
-          ),
-        ),
+        onTap: () {
+          Navigator.pushNamed(
+            context,
+            PourToujoursRouteNames.person,
+            arguments: DetailRouteArgs(
+              title: member.name,
+              subtitle: relationshipFor(viewer: viewer, person: member),
+              payload: member.name,
+              viewerName: viewer.name,
+            ),
+          );
+        },
         leading: CircleAvatar(child: Text(member.initials)),
         title: Row(
           children: [
@@ -936,11 +951,7 @@ class HourlyForecastScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final start = payload.day.date;
-    final values = payload.bundle.hourly
-        .where((item) => !item.time.isBefore(start))
-        .take(48)
-        .toList();
+    final values = payload.bundle.hourly.take(48).toList();
     return Scaffold(
       appBar: AppBar(title: Text('${payload.city.name} · hourly')),
       body: ListView(
@@ -952,7 +963,7 @@ class HourlyForecastScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Scroll through temperature, feels-like, precipitation, wind, humidity, UV, and daylight for up to 48 hours.',
+            'Temperature, feels-like, rain, wind, gusts, humidity, UV, and daylight for up to 48 hours.',
             style: TextStyle(color: context.pt.secondaryText),
           ),
           const SizedBox(height: 18),
@@ -962,7 +973,7 @@ class HourlyForecastScreen extends StatelessWidget {
               message: 'The daily forecast remains available.',
             )
           else ...[
-            _HourlyChart(values: values, day: payload.day),
+            _HourlyChart(values: values),
             const SizedBox(height: 18),
             for (final item in values)
               Semantics(
@@ -986,13 +997,11 @@ class HourlyForecastScreen extends StatelessWidget {
 }
 
 class _HourlyChart extends StatelessWidget {
-  const _HourlyChart({required this.values, required this.day});
+  const _HourlyChart({required this.values});
   final List<HourlyWeather> values;
-  final DailyWeather day;
 
   @override
   Widget build(BuildContext context) {
-    const widthPerHour = 52.0;
     return Container(
       height: 300,
       decoration: BoxDecoration(
@@ -1003,11 +1012,10 @@ class _HourlyChart extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: SizedBox(
-          width: math.max(600, values.length * widthPerHour),
+          width: math.max(600, values.length * 52),
           child: CustomPaint(
             painter: _HourlyPainter(
               values: values,
-              day: day,
               accent: context.pt.accent,
               secondary: context.pt.warning,
               grid: context.pt.outline,
@@ -1029,15 +1037,15 @@ class WeatherComparisonScreen extends StatefulWidget {
 }
 
 class _WeatherComparisonScreenState extends State<WeatherComparisonScreen> {
-  final _service = WeatherService();
-  final _alerts = WeatherAlertService();
+  final WeatherService _weather = WeatherService();
+  final WeatherAlertService _alerts = WeatherAlertService();
   late Future<List<_CompareRow>> _future;
 
   @override
   void initState() {
     super.initState();
     _future = Future.wait(cities.map((city) async {
-      final bundle = await _service.fetchBundle(city.id);
+      final bundle = await _weather.fetchBundle(city.id);
       final official = await _alerts.fetchOfficialForCity(city.id);
       return _CompareRow(
         city,
@@ -1060,7 +1068,6 @@ class _WeatherComparisonScreenState extends State<WeatherComparisonScreen> {
               child: PtLoadingSkeleton(height: 420),
             );
           }
-          final rows = snapshot.data!;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 50),
             children: [
@@ -1070,11 +1077,11 @@ class _WeatherComparisonScreenState extends State<WeatherComparisonScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Values share the same scale so differences are visible without opening four separate cards.',
+                'Values share the same visual structure for direct comparison.',
                 style: TextStyle(color: context.pt.secondaryText),
               ),
               const SizedBox(height: 18),
-              _ComparisonMatrix(rows: rows),
+              _ComparisonMatrix(rows: snapshot.data!),
             ],
           );
         },
@@ -1100,9 +1107,8 @@ class _ComparisonMatrix extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowHeight: 48,
         dataRowMinHeight: 62,
-        dataRowMaxHeight: 74,
+        dataRowMaxHeight: 76,
         columns: const [
           DataColumn(label: Text('City')),
           DataColumn(label: Text('Now')),
@@ -1117,13 +1123,28 @@ class _ComparisonMatrix extends StatelessWidget {
           for (final row in rows)
             DataRow(
               cells: [
-                DataCell(Text(row.city.name, style: const TextStyle(fontWeight: FontWeight.w800))),
-                DataCell(Text('${settings.temperature(row.bundle.current.temperature)}\nFeels ${settings.temperature(row.bundle.current.feelsLike)}\n${row.bundle.condition}')),
+                DataCell(
+                  Text(
+                    row.city.name,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${settings.temperature(row.bundle.current.temperature)}\nFeels ${settings.temperature(row.bundle.current.feelsLike)}\n${row.bundle.condition}',
+                  ),
+                ),
                 DataCell(Text('${row.bundle.current.rainChance}%')),
                 DataCell(Text('${row.bundle.current.windSpeed.round()} km/h')),
                 DataCell(Text(_lightRemaining(row.city, row.bundle))),
-                DataCell(Text('${DateFormat('HH:mm').format(row.bundle.daily.first.sunrise)} / ${DateFormat('HH:mm').format(row.bundle.daily.first.sunset)}')),
-                DataCell(Text(row.alerts.isEmpty ? 'None' : row.alerts.first.event)),
+                DataCell(
+                  Text(
+                    '${DateFormat('HH:mm').format(row.bundle.daily.first.sunrise)} / ${DateFormat('HH:mm').format(row.bundle.daily.first.sunset)}',
+                  ),
+                ),
+                DataCell(
+                  Text(row.alerts.isEmpty ? 'None' : row.alerts.first.event),
+                ),
                 DataCell(Text(_bestOutdoor(row.bundle))),
               ],
             ),
@@ -1148,16 +1169,26 @@ class AlertDetailScreen extends StatelessWidget {
           Icon(
             Icons.warning_rounded,
             size: 48,
-            color: alert.isInterruptive ? context.pt.danger : context.pt.warning,
+            color: alert.isInterruptive ? context.pt.warning : context.pt.accent,
           ),
           const SizedBox(height: 16),
-          Text(_alertType(alert), style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            _alertType(alert),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 6),
-          Text(alert.headline, style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            alert.headline,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const SizedBox(height: 18),
           Text(alert.instruction, style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 22),
-          _DetailLine('Source', alert.attribution ?? (official ? 'Official authority' : 'Pour Toujours forecast guidance')),
+          _DetailLine(
+            'Source',
+            alert.attribution ??
+                (official ? 'Official authority' : 'Pour Toujours guidance'),
+          ),
           _DetailLine('Severity', alert.severity.name),
           _DetailLine('Expires', _expiryText(alert)),
           if (alert.area != null) _DetailLine('Affected area', alert.area!),
@@ -1166,7 +1197,7 @@ class AlertDetailScreen extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             official
-                ? 'This information is presented from the issuing authority. Follow local emergency instructions.'
+                ? 'Follow the issuing authority and local emergency instructions.'
                 : 'This is forecast-derived practical guidance, not an official warning or watch.',
             style: TextStyle(color: context.pt.secondaryText),
           ),
@@ -1182,16 +1213,29 @@ class _DetailLine extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 100, child: Text(label, style: TextStyle(color: context.pt.secondaryText))),
-            Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w700))),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(color: context.pt.secondaryText),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SolarArcPainter extends CustomPainter {
@@ -1219,19 +1263,22 @@ class _SolarArcPainter extends CustomPainter {
         Paint()
           ..shader = const RadialGradient(
             colors: [Color(0xFFFFE5A0), Color(0x00FFE5A0)],
-          ).createShader(Rect.fromCircle(center: tangent.position, radius: 15)),
+          ).createShader(
+            Rect.fromCircle(center: tangent.position, radius: 15),
+          ),
       );
-      canvas.drawCircle(tangent.position, 5, Paint()..color = const Color(0xFFFFD56A));
+      canvas.drawCircle(
+        tangent.position,
+        5,
+        Paint()..color = const Color(0xFFFFD56A),
+      );
     }
-    canvas.drawLine(
-      Offset(8, size.height - 19),
-      Offset(size.width - 8, size.height - 19),
-      Paint()..color = Colors.white.withValues(alpha: .16),
-    );
   }
 
   @override
-  bool shouldRepaint(covariant _SolarArcPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _SolarArcPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
 }
 
 class _CityIdentityPainter extends CustomPainter {
@@ -1240,51 +1287,74 @@ class _CityIdentityPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.black.withValues(alpha: .18);
     final baseline = size.height * .74;
-    if (cityId == 'karachi') {
-      canvas.drawRect(Rect.fromLTWH(0, baseline, size.width, size.height - baseline), Paint()..color = const Color(0xFF255A67).withValues(alpha: .35));
-      for (var i = 0; i < 14; i++) {
-        final h = 20.0 + (i % 5) * 13;
-        canvas.drawRect(Rect.fromLTWH(i * size.width / 13 - 4, baseline - h, size.width / 15, h), paint);
-      }
-    } else if (cityId == 'chiba') {
-      canvas.drawRect(Rect.fromLTWH(0, baseline, size.width, size.height - baseline), Paint()..color = const Color(0xFF173E63).withValues(alpha: .35));
-      for (var i = 0; i < 10; i++) {
-        final h = 25.0 + (i % 4) * 16;
-        canvas.drawRect(Rect.fromLTWH(i * size.width / 9, baseline - h, size.width / 16, h), paint);
+    final silhouette = Paint()..color = Colors.black.withValues(alpha: .18);
+    if (cityId == 'karachi' || cityId == 'chiba') {
+      final water = cityId == 'karachi'
+          ? const Color(0xFF255A67)
+          : const Color(0xFF173E63);
+      canvas.drawRect(
+        Rect.fromLTWH(0, baseline, size.width, size.height - baseline),
+        Paint()..color = water.withValues(alpha: .35),
+      );
+      for (var index = 0; index < 12; index++) {
+        final height = 22.0 + (index % 5) * 13;
+        canvas.drawRect(
+          Rect.fromLTWH(
+            index * size.width / 11,
+            baseline - height,
+            size.width / 15,
+            height,
+          ),
+          silhouette,
+        );
       }
     } else if (cityId == 'dublin') {
-      for (var i = 0; i < 11; i++) {
-        final x = i * size.width / 10;
-        final roof = Path()..moveTo(x, baseline)..lineTo(x + size.width / 22, baseline - 25)..lineTo(x + size.width / 11, baseline)..close();
-        canvas.drawPath(roof, paint);
-        canvas.drawRect(Rect.fromLTWH(x, baseline, size.width / 11, 42), paint);
+      for (var index = 0; index < 11; index++) {
+        final x = index * size.width / 10;
+        final roof = Path()
+          ..moveTo(x, baseline)
+          ..lineTo(x + size.width / 22, baseline - 25)
+          ..lineTo(x + size.width / 11, baseline)
+          ..close();
+        canvas.drawPath(roof, silhouette);
+        canvas.drawRect(
+          Rect.fromLTWH(x, baseline, size.width / 11, 42),
+          silhouette,
+        );
       }
     } else {
-      final canopy = Paint()..color = const Color(0xFF183E32).withValues(alpha: .35);
-      for (var i = 0; i < 12; i++) {
-        canvas.drawCircle(Offset(i * size.width / 11, baseline - 18 - (i % 3) * 8), 30, canopy);
+      final canopy = Paint()
+        ..color = const Color(0xFF183E32).withValues(alpha: .35);
+      for (var index = 0; index < 12; index++) {
+        canvas.drawCircle(
+          Offset(index * size.width / 11, baseline - 18 - (index % 3) * 8),
+          30,
+          canopy,
+        );
       }
-      canvas.drawRect(Rect.fromLTWH(0, baseline, size.width, size.height - baseline), paint);
+      canvas.drawRect(
+        Rect.fromLTWH(0, baseline, size.width, size.height - baseline),
+        silhouette,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _CityIdentityPainter oldDelegate) => oldDelegate.cityId != cityId;
+  bool shouldRepaint(covariant _CityIdentityPainter oldDelegate) {
+    return oldDelegate.cityId != cityId;
+  }
 }
 
 class _HourlyPainter extends CustomPainter {
   const _HourlyPainter({
     required this.values,
-    required this.day,
     required this.accent,
     required this.secondary,
     required this.grid,
     required this.text,
   });
   final List<HourlyWeather> values;
-  final DailyWeather day;
   final Color accent;
   final Color secondary;
   final Color grid;
@@ -1296,53 +1366,109 @@ class _HourlyPainter extends CustomPainter {
     const top = 25.0;
     const bottom = 42.0;
     final plot = Rect.fromLTRB(left, top, size.width - 12, size.height - bottom);
-    final allTemps = values.expand((v) => [v.temperature, v.feelsLike]);
-    final minT = allTemps.reduce(math.min) - 2;
-    final maxT = allTemps.reduce(math.max) + 2;
-    for (var i = 0; i <= 4; i++) {
-      final y = plot.top + plot.height * i / 4;
-      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), Paint()..color = grid);
-      final value = maxT - (maxT - minT) * i / 4;
-      _text(canvas, '${value.round()}°', Offset(3, y - 7), 9);
+    final temperatures = values.expand((value) {
+      return [value.temperature, value.feelsLike];
+    });
+    final minimum = temperatures.reduce(math.min) - 2;
+    final maximum = temperatures.reduce(math.max) + 2;
+    for (var index = 0; index <= 4; index++) {
+      final y = plot.top + plot.height * index / 4;
+      canvas.drawLine(
+        Offset(plot.left, y),
+        Offset(plot.right, y),
+        Paint()..color = grid,
+      );
+      final value = maximum - (maximum - minimum) * index / 4;
+      _drawText(canvas, '${value.round()}°', Offset(3, y - 7), 9);
     }
-    final tempPath = Path();
+    final temperaturePath = Path();
     final feelsPath = Path();
-    for (var i = 0; i < values.length; i++) {
-      final x = plot.left + plot.width * i / math.max(1, values.length - 1);
-      final tY = plot.bottom - (values[i].temperature - minT) / (maxT - minT) * plot.height;
-      final fY = plot.bottom - (values[i].feelsLike - minT) / (maxT - minT) * plot.height;
-      if (i == 0) {
-        tempPath.moveTo(x, tY);
-        feelsPath.moveTo(x, fY);
+    for (var index = 0; index < values.length; index++) {
+      final x = plot.left + plot.width * index / math.max(1, values.length - 1);
+      final temperatureY = plot.bottom -
+          (values[index].temperature - minimum) /
+              (maximum - minimum) *
+              plot.height;
+      final feelsY = plot.bottom -
+          (values[index].feelsLike - minimum) /
+              (maximum - minimum) *
+              plot.height;
+      if (index == 0) {
+        temperaturePath.moveTo(x, temperatureY);
+        feelsPath.moveTo(x, feelsY);
       } else {
-        tempPath.lineTo(x, tY);
-        feelsPath.lineTo(x, fY);
+        temperaturePath.lineTo(x, temperatureY);
+        feelsPath.lineTo(x, feelsY);
       }
-      final rainHeight = plot.height * .24 * values[i].precipitationProbability / 100;
-      canvas.drawRect(Rect.fromLTWH(x - 4, plot.bottom - rainHeight, 8, rainHeight), Paint()..color = accent.withValues(alpha: .28));
-      if (i % 3 == 0) _text(canvas, DateFormat('ha').format(values[i].time), Offset(x - 12, plot.bottom + 9), 8);
+      final rainHeight = plot.height *
+          .24 *
+          values[index].precipitationProbability /
+          100;
+      canvas.drawRect(
+        Rect.fromLTWH(x - 4, plot.bottom - rainHeight, 8, rainHeight),
+        Paint()..color = accent.withValues(alpha: .28),
+      );
+      if (index % 3 == 0) {
+        _drawText(
+          canvas,
+          DateFormat('ha').format(values[index].time),
+          Offset(x - 12, plot.bottom + 9),
+          8,
+        );
+      }
     }
-    canvas.drawPath(tempPath, Paint()..color = accent..strokeWidth = 2.5..style = PaintingStyle.stroke);
-    canvas.drawPath(feelsPath, Paint()..color = secondary..strokeWidth = 1.8..style = PaintingStyle.stroke);
-    _text(canvas, 'Temperature', const Offset(42, 5), 9, color: accent);
-    _text(canvas, 'Feels-like', const Offset(120, 5), 9, color: secondary);
+    canvas.drawPath(
+      temperaturePath,
+      Paint()
+        ..color = accent
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.drawPath(
+      feelsPath,
+      Paint()
+        ..color = secondary
+        ..strokeWidth = 1.8
+        ..style = PaintingStyle.stroke,
+    );
+    _drawText(canvas, 'Temperature', const Offset(42, 5), 9, color: accent);
+    _drawText(canvas, 'Feels-like', const Offset(120, 5), 9, color: secondary);
   }
 
-  void _text(Canvas canvas, String value, Offset offset, double size, {Color? color}) {
+  void _drawText(
+    Canvas canvas,
+    String value,
+    Offset offset,
+    double size, {
+    Color? color,
+  }) {
     final painter = TextPainter(
-      text: TextSpan(text: value, style: TextStyle(color: color ?? text, fontSize: size)),
-      textDirection: TextDirection.ltr,
+      text: TextSpan(
+        text: value,
+        style: TextStyle(color: color ?? text, fontSize: size),
+      ),
+      textDirection: ui.TextDirection.ltr,
     )..layout();
     painter.paint(canvas, offset);
   }
 
   @override
-  bool shouldRepaint(covariant _HourlyPainter oldDelegate) => oldDelegate.values != values;
+  bool shouldRepaint(covariant _HourlyPainter oldDelegate) {
+    return oldDelegate.values != values;
+  }
 }
 
-FamilyCity _city(String id) => cities.firstWhere((city) => city.id == id);
-List<FamilyMember> _members(String id) => familyMembers.where((member) => member.cityId == id).toList();
-tz.TZDateTime _localNow(FamilyCity city) => tz.TZDateTime.now(tz.getLocation(city.timezone));
+FamilyCity _city(String id) {
+  return cities.firstWhere((city) => city.id == id);
+}
+
+List<FamilyMember> _members(String id) {
+  return familyMembers.where((member) => member.cityId == id).toList();
+}
+
+tz.TZDateTime _localNow(FamilyCity city) {
+  return tz.TZDateTime.now(tz.getLocation(city.timezone));
+}
 
 String _differenceText(Duration difference) {
   final minutes = difference.inMinutes;
@@ -1354,11 +1480,13 @@ String _differenceText(Duration difference) {
 }
 
 FamilyWeatherAlert _highestAlert(List<FamilyWeatherAlert> alerts) {
-  final values = [...alerts]..sort((a, b) {
-    final source = a.source == b.source ? 0 : (a.source == WeatherAlertSource.official ? -1 : 1);
-    if (source != 0) return source;
-    return b.severity.index.compareTo(a.severity.index);
-  });
+  final values = [...alerts]
+    ..sort((first, second) {
+      if (first.source != second.source) {
+        return first.source == WeatherAlertSource.official ? -1 : 1;
+      }
+      return second.severity.index.compareTo(first.severity.index);
+    });
   return values.first;
 }
 
@@ -1366,14 +1494,24 @@ void _openAlert(BuildContext context, FamilyWeatherAlert alert) {
   Navigator.pushNamed(
     context,
     PourToujoursRouteNames.alert,
-    arguments: DetailRouteArgs(title: alert.event, subtitle: alert.headline, payload: alert),
+    arguments: DetailRouteArgs(
+      title: alert.event,
+      subtitle: alert.headline,
+      payload: alert,
+    ),
   );
 }
 
 String _alertType(FamilyWeatherAlert alert) {
-  if (alert.source == WeatherAlertSource.derived) return 'FORECAST-DERIVED ADVISORY';
-  if (alert.event.toLowerCase().contains('warning')) return 'OFFICIAL WARNING';
-  if (alert.event.toLowerCase().contains('watch')) return 'OFFICIAL WATCH';
+  if (alert.source == WeatherAlertSource.derived) {
+    return 'FORECAST-DERIVED ADVISORY';
+  }
+  if (alert.event.toLowerCase().contains('warning')) {
+    return 'OFFICIAL WARNING';
+  }
+  if (alert.event.toLowerCase().contains('watch')) {
+    return 'OFFICIAL WATCH';
+  }
   return 'OFFICIAL WEATHER ALERT';
 }
 
@@ -1384,23 +1522,27 @@ String _expiryText(FamilyWeatherAlert alert) {
 
 String _duration(Duration value) {
   final total = value.inMinutes.abs();
-  final h = total ~/ 60;
-  final m = total % 60;
-  if (h == 0) return '$m min';
-  if (m == 0) return '$h h';
-  return '$h h $m min';
+  final hours = total ~/ 60;
+  final minutes = total % 60;
+  if (hours == 0) return '$minutes min';
+  if (minutes == 0) return '$hours h';
+  return '$hours h $minutes min';
 }
 
-String _daylightComparison(FamilyCity city, FamilyCity viewerCity, WeatherBundle bundle) {
-  if (city.id == viewerCity.id) return 'your local daylight';
-  final other = bundle.daily.first.daylightDuration;
-  final baseline = const Duration(hours: 12);
-  final difference = other - baseline;
-  return '${_duration(difference)} ${difference.isNegative ? 'less' : 'more'} than a 12-hour day';
+String _daylightElapsed(DateTime local, DailyWeather day) {
+  if (local.isBefore(day.sunrise)) return 'daylight has not begun';
+  if (local.isAfter(day.sunset)) return 'daylight complete';
+  final elapsed = local.difference(day.sunrise);
+  final remaining = day.sunset.difference(local);
+  return '${_duration(elapsed)} elapsed · ${_duration(remaining)} remaining';
 }
 
 String _moonPhase(DateTime date) {
-  final days = date.toUtc().difference(DateTime.utc(2000, 1, 6, 18, 14)).inMinutes / 1440;
+  final days = date
+          .toUtc()
+          .difference(DateTime.utc(2000, 1, 6, 18, 14))
+          .inMinutes /
+      1440;
   final phase = ((days % 29.53058867) / 29.53058867 + 1) % 1;
   if (phase < .03 || phase > .97) return 'new moon';
   if (phase < .22) return 'waxing crescent';
@@ -1427,15 +1569,25 @@ HourlyWeather? _hourFor(WeatherBundle bundle, int hour) {
   return null;
 }
 
-int _availableCount(List<FamilyMember> members) => members.where((member) {
-      return evaluateAvailability(member: member, city: _city(member.cityId)).kind == AvailabilityKind.likelyFree;
-    }).length;
+int _availableCount(List<FamilyMember> members) {
+  return members.where((member) {
+    return evaluateAvailability(
+          member: member,
+          city: _city(member.cityId),
+        ).kind ==
+        AvailabilityKind.likelyFree;
+  }).length;
+}
 
 DateTime _nextContact(FamilyMember member, FamilyCity city) {
   final now = DateTime.now().toUtc();
   for (var step = 1; step <= 96; step++) {
     final instant = now.add(Duration(minutes: step * 15));
-    final kind = evaluateAvailability(member: member, city: city, now: instant).kind;
+    final kind = evaluateAvailability(
+      member: member,
+      city: city,
+      now: instant,
+    ).kind;
     if (kind == AvailabilityKind.likelyFree) return instant;
   }
   return now.add(const Duration(days: 1));
@@ -1443,32 +1595,38 @@ DateTime _nextContact(FamilyMember member, FamilyCity city) {
 
 String _lightRemaining(FamilyCity city, WeatherBundle bundle) {
   final now = _localNow(city);
-  final sunset = bundle.daily.first.sunset;
-  if (now.isAfter(sunset)) return 'Night';
-  if (now.isBefore(bundle.daily.first.sunrise)) return 'Before sunrise';
-  return _duration(sunset.difference(now));
+  final day = bundle.daily.first;
+  if (now.isAfter(day.sunset)) return 'Night';
+  if (now.isBefore(day.sunrise)) return 'Before sunrise';
+  return _duration(day.sunset.difference(now));
 }
 
 String _bestOutdoor(WeatherBundle bundle) {
   final candidates = bundle.hourly.where((item) {
-    return item.precipitationProbability < 35 && item.uvIndex < 7 && item.windGusts < 40;
+    return item.precipitationProbability < 35 &&
+        item.uvIndex < 7 &&
+        item.windGusts < 40;
   }).take(12).toList();
   if (candidates.isEmpty) return 'No clear window';
   return DateFormat('h a').format(candidates.first.time);
 }
 
-Color _availabilityColor(BuildContext context, AvailabilityKind kind) => switch (kind) {
-      AvailabilityKind.likelyFree => context.pt.success,
-      AvailabilityKind.maybeFree => context.pt.uncertain,
-      AvailabilityKind.working => context.pt.working,
-      AvailabilityKind.asleep => context.pt.asleep,
-      AvailabilityKind.unknown => context.pt.unavailable,
-    };
+Color _availabilityColor(BuildContext context, AvailabilityKind kind) {
+  return switch (kind) {
+    AvailabilityKind.likelyFree => context.pt.success,
+    AvailabilityKind.maybeFree => context.pt.uncertain,
+    AvailabilityKind.working => context.pt.working,
+    AvailabilityKind.asleep => context.pt.asleep,
+    AvailabilityKind.unknown => context.pt.unavailable,
+  };
+}
 
 IconData _weatherIcon(int code) {
   if (code >= 95) return Icons.thunderstorm_rounded;
   if (code >= 71 && code <= 77) return Icons.ac_unit_rounded;
-  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return Icons.water_drop_outlined;
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+    return Icons.water_drop_outlined;
+  }
   if (code == 45 || code == 48) return Icons.blur_on_rounded;
   if (code >= 2) return Icons.cloud_outlined;
   return Icons.light_mode_rounded;
