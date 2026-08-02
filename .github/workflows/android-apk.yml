@@ -105,12 +105,43 @@ jobs:
               "if (!snapshot.hasData || snapshot.data!.isEmpty) return const PtEmptyState(title: 'Holiday information unavailable', message: 'Connect to the internet and pull down on Today to retry.');",
               "if (!snapshot.hasData || snapshot.data!.isEmpty) {\n              return const PtEmptyState(\n                title: 'Holiday information unavailable',\n                message: 'Connect to the internet and pull down on Today to retry.',\n              );\n            }",
           )
+          source = source.replace(
+              "const SizedBox(width: 8),\n                  Text(offset == 0 ? 'same' : '${offset.abs()}h ${offset > 0 ? 'ahead' : 'behind'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),",
+              "if (MediaQuery.textScalerOf(context).scale(1) <= 1.2) ...[\n                    const SizedBox(width: 8),\n                    Flexible(\n                      child: Text(\n                        offset == 0\n                            ? 'same'\n                            : '${offset.abs()}h ${offset > 0 ? 'ahead' : 'behind'}',\n                        maxLines: 1,\n                        overflow: TextOverflow.ellipsis,\n                        style: const TextStyle(\n                          color: Colors.white60,\n                          fontSize: 11,\n                        ),\n                      ),\n                    ),\n                  ],",
+          )
           screen.write_text(source, encoding='utf-8')
 
+          settings = Path('lib/features/settings/settings_screen.dart')
+          settings_text = settings.read_text(encoding='utf-8')
+          old_section = '''return DecoratedBox(
+              decoration: BoxDecoration(
+                color: context.pt.card,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: context.pt.outline),
+              ),
+              child: Padding('''
+          new_section = '''return Material(
+              color: context.pt.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(color: context.pt.outline),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Padding('''
+          if old_section not in settings_text:
+              raise RuntimeError('Settings section surface target was not found.')
+          settings.write_text(settings_text.replace(old_section, new_section, 1), encoding='utf-8')
+
           test = Path('test/premium_mobile_qa_test.dart')
-          test_text = test.read_text(encoding='utf-8').replace(
-              '    WeatherService.debugOverrides = null;\n',
-              '',
+          test_text = test.read_text(encoding='utf-8')
+          test_text = test_text.replace('    WeatherService.debugOverrides = null;\n', '')
+          test_text = test_text.replace(
+              "      expect(find.text('Family now'), findsOneWidget);\n      expectClean(tester);",
+              "      expectClean(tester);\n      await tester.scrollUntilVisible(\n        find.text('Family now'),\n        220,\n        scrollable: find.byType(Scrollable).first,\n      );\n      expect(find.text('Family now'), findsOneWidget);",
+          )
+          test_text = test_text.replace(
+              "    await tester.tap(find.text('Reduce motion'));\n    await tester.pump();",
+              "    await tester.scrollUntilVisible(\n      find.text('Reduce motion'),\n      220,\n      scrollable: find.byType(Scrollable).first,\n    );\n    await tester.tap(find.text('Reduce motion'));\n    await tester.pump();",
           )
           test.write_text(test_text, encoding='utf-8')
           PY
