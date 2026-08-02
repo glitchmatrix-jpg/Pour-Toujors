@@ -79,15 +79,16 @@ class AmbientSky extends StatefulWidget {
 class _AmbientSkyState extends State<AmbientSky>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  bool _motionStarted = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 22),
+      duration: const Duration(seconds: 4),
+      value: .35,
     );
-    _syncMotion();
   }
 
   @override
@@ -101,8 +102,11 @@ class _AmbientSkyState extends State<AmbientSky>
     if (reduced) {
       _controller.stop();
       _controller.value = .35;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
+      return;
+    }
+    if (!_motionStarted) {
+      _motionStarted = true;
+      _controller.forward(from: 0);
     }
   }
 
@@ -244,7 +248,8 @@ class _AmbientSkyPainter extends CustomPainter {
   void _stars(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.white.withValues(alpha: .62);
     for (var i = 0; i < 25; i++) {
-      final x = ((i * 47.0) % size.width) + math.sin(progress * math.pi * 2 + i) * 2;
+      final x = ((i * 47.0) % size.width) +
+          math.sin(progress * math.pi * 2 + i) * 2;
       final y = (i * 29.0) % (size.height * .62);
       final radius = .7 + ((i % 4) * .28);
       canvas.drawCircle(Offset(x, y), radius, paint);
@@ -252,7 +257,8 @@ class _AmbientSkyPainter extends CustomPainter {
   }
 
   void _sun(Canvas canvas, Size size) {
-    final x = size.width * (.72 + math.sin(progress * math.pi * 2) * .012);
+    final x = size.width *
+        (.72 + math.sin(progress * math.pi * 2) * .012);
     final y = kind == AmbientSkyKind.sunrise
         ? size.height * .56
         : kind == AmbientSkyKind.sunset
@@ -286,9 +292,10 @@ class _AmbientSkyPainter extends CustomPainter {
         alpha: kind == AmbientSkyKind.thunderstorm ? .12 : .25,
       );
     for (var i = 0; i < 4; i++) {
-      final baseX = ((i * size.width * .31) + progress * size.width * .18) %
-              (size.width + 120) -
-          60;
+      final baseX =
+          ((i * size.width * .31) + progress * size.width * .18) %
+                  (size.width + 120) -
+              60;
       final baseY = size.height * (.16 + i * .12);
       final scale = .65 + i * .08;
       canvas.drawOval(
