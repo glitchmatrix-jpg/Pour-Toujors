@@ -114,8 +114,8 @@ jobs:
               ),
               (
                   'height: 220,\n          clipBehavior: Clip.antiAlias,',
-                  'height: 252,\n          clipBehavior: Clip.antiAlias,',
-                  'live weather card height',
+                  'constraints: const BoxConstraints(minHeight: 220),\n          clipBehavior: Clip.antiAlias,',
+                  'content-sized weather card',
               ),
               (
                   'height: 120,\n      child: ListView.separated(',
@@ -126,6 +126,11 @@ jobs:
                   'else if (weather == null)',
                   'else if (weather == null || !weather.isLive)',
                   'offline weather guard',
+              ),
+              (
+                  'const Spacer(),\n                      Text(\n                        weather.practicalLine,',
+                  'const SizedBox(height: 12),\n                      Text(\n                        weather.practicalLine,',
+                  'weather card content spacing',
               ),
           ]
 
