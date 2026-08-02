@@ -23,7 +23,6 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "analysis_options.yaml"
-      - "tools/fetch_premium_assets.ps1"
       - ".github/workflows/android-apk.yml"
   pull_request:
     branches:
@@ -36,7 +35,6 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "analysis_options.yaml"
-      - "tools/fetch_premium_assets.ps1"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -78,22 +76,6 @@ jobs:
           dart --version
           java -version
 
-      - name: Fetch licensed visual assets
-        shell: pwsh
-        run: ./tools/fetch_premium_assets.ps1
-
-      - name: Verify required assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s assets/city_photos/karachi.jpg
-          test -s assets/city_photos/chiba.jpg
-          test -s assets/city_photos/dublin.jpg
-          test -s assets/city_photos/hattiesburg.jpg
-          test -s assets/weather_icons/clear-day.svg
-          test -s assets/weather_icons/clear-night.svg
-          echo "Required runtime assets are present."
-
       - name: Generate Android platform when absent
         shell: bash
         run: |
@@ -127,11 +109,11 @@ jobs:
 
       - name: Build debug APK
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
-        run: flutter build apk --debug --build-name=0.2.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --debug --build-name=0.3.0 --build-number=${{ github.run_number }}
 
       - name: Build release APK for QA
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
-        run: flutter build apk --release --build-name=0.2.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-name=0.3.0 --build-number=${{ github.run_number }}
 
       - name: Collect APKs and checksums
         if: always()
