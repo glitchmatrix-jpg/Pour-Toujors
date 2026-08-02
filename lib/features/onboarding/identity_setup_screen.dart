@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data/family_seed.dart';
 
@@ -32,15 +33,15 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                   Row(
                     children: [
                       Container(
-                        width: 42,
-                        height: 42,
+                        width: 48,
+                        height: 48,
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: const Color(0xFF102A2C),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Icon(
-                          Icons.public_rounded,
-                          color: Colors.white,
+                        child: SvgPicture.asset(
+                          'assets/brand/pour_toujours_mark.svg',
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -73,8 +74,7 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                   Expanded(
                     flex: 5,
                     child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 190,
                         mainAxisExtent: 112,
                         crossAxisSpacing: 12,
@@ -91,14 +91,10 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                             duration: const Duration(milliseconds: 180),
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: active
-                                  ? const Color(0xFF102A2C)
-                                  : Colors.white,
+                              color: active ? const Color(0xFF102A2C) : Colors.white,
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
-                                color: active
-                                    ? const Color(0xFF102A2C)
-                                    : const Color(0xFFE2E5E0),
+                                color: active ? const Color(0xFF102A2C) : const Color(0xFFE2E5E0),
                               ),
                               boxShadow: active
                                   ? const [
@@ -114,33 +110,24 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                               children: [
                                 CircleAvatar(
                                   radius: 24,
-                                  backgroundColor: active
-                                      ? Colors.white12
-                                      : const Color(0xFFE9EFEC),
-                                  foregroundColor: active
-                                      ? Colors.white
-                                      : const Color(0xFF102A2C),
+                                  backgroundColor: active ? Colors.white12 : const Color(0xFFE9EFEC),
+                                  foregroundColor: active ? Colors.white : const Color(0xFF102A2C),
                                   child: Text(
                                     member.initials,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                    style: const TextStyle(fontWeight: FontWeight.w800),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         member.name,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: active
-                                              ? Colors.white
-                                              : const Color(0xFF151A19),
+                                          color: active ? Colors.white : const Color(0xFF151A19),
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -149,9 +136,7 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                                         member.relationship,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: active
-                                              ? Colors.white60
-                                              : const Color(0xFF777F7D),
+                                          color: active ? Colors.white60 : const Color(0xFF777F7D),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -177,9 +162,7 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                               try {
                                 await widget.onSelected(selected!);
                               } finally {
-                                if (mounted) {
-                                  setState(() => saving = false);
-                                }
+                                if (mounted) setState(() => saving = false);
                               }
                             },
                       style: FilledButton.styleFrom(
@@ -189,9 +172,7 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                         ),
                       ),
                       child: Text(
-                        saving
-                            ? 'Setting things up…'
-                            : 'Continue as ${selected ?? 'yourself'}',
+                        saving ? 'Setting things up…' : 'Continue as ${selected ?? 'yourself'}',
                       ),
                     ),
                   ),
@@ -199,10 +180,7 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
                   const Center(
                     child: Text(
                       'No account, PIN, or location tracking.',
-                      style: TextStyle(
-                        color: Color(0xFF838A88),
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Color(0xFF838A88), fontSize: 12),
                     ),
                   ),
                 ],
