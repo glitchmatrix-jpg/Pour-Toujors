@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,56 +57,65 @@ class AppSettings {
 }
 
 class AppSettingsController extends ChangeNotifier {
-  AppSettingsController({AppSettings initial = const AppSettings()}) : _value = initial;
+  AppSettingsController({AppSettings initial = const AppSettings()})
+      : _value = initial;
 
   AppSettings _value;
   AppSettings get value => _value;
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    _value = AppSettings(
-      theme: _enumValue(
-        PtThemeCollection.values,
-        prefs.getString('themeCollection'),
-        PtThemeCollection.evergreen,
-      ),
-      themeMode: _enumValue(
-        ThemeMode.values,
-        prefs.getString('themeMode'),
-        ThemeMode.system,
-      ),
-      temperatureUnit: _enumValue(
-        TemperatureUnit.values,
-        prefs.getString('temperatureUnit'),
-        TemperatureUnit.celsius,
-      ),
-      windUnit: _enumValue(
-        WindUnit.values,
-        prefs.getString('windUnit'),
-        WindUnit.kilometersPerHour,
-      ),
-      clockFormat: _enumValue(
-        ClockFormat.values,
-        prefs.getString('clockFormat'),
-        ClockFormat.twelveHour,
-      ),
-      reducedMotion: prefs.getBool('reducedMotion') ?? false,
-    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _value = AppSettings(
+        theme: _enumValue(
+          PtThemeCollection.values,
+          prefs.getString('themeCollection'),
+          PtThemeCollection.evergreen,
+        ),
+        themeMode: _enumValue(
+          ThemeMode.values,
+          prefs.getString('themeMode'),
+          ThemeMode.system,
+        ),
+        temperatureUnit: _enumValue(
+          TemperatureUnit.values,
+          prefs.getString('temperatureUnit'),
+          TemperatureUnit.celsius,
+        ),
+        windUnit: _enumValue(
+          WindUnit.values,
+          prefs.getString('windUnit'),
+          WindUnit.kilometersPerHour,
+        ),
+        clockFormat: _enumValue(
+          ClockFormat.values,
+          prefs.getString('clockFormat'),
+          ClockFormat.twelveHour,
+        ),
+        reducedMotion: prefs.getBool('reducedMotion') ?? false,
+      );
+    } on Object catch (error, stackTrace) {
+      debugPrint('Settings could not be loaded; defaults retained: $error\n$stackTrace');
+    }
     notifyListeners();
   }
 
   Future<void> update(AppSettings next) async {
     _value = next;
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait([
-      prefs.setString('themeCollection', next.theme.name),
-      prefs.setString('themeMode', next.themeMode.name),
-      prefs.setString('temperatureUnit', next.temperatureUnit.name),
-      prefs.setString('windUnit', next.windUnit.name),
-      prefs.setString('clockFormat', next.clockFormat.name),
-      prefs.setBool('reducedMotion', next.reducedMotion),
-    ]);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await Future.wait([
+        prefs.setString('themeCollection', next.theme.name),
+        prefs.setString('themeMode', next.themeMode.name),
+        prefs.setString('temperatureUnit', next.temperatureUnit.name),
+        prefs.setString('windUnit', next.windUnit.name),
+        prefs.setString('clockFormat', next.clockFormat.name),
+        prefs.setBool('reducedMotion', next.reducedMotion),
+      ]);
+    } on Object catch (error, stackTrace) {
+      debugPrint('Settings could not be persisted: $error\n$stackTrace');
+    }
   }
 
   static T _enumValue<T extends Enum>(
