@@ -84,16 +84,39 @@ void main() {
     };
     final base = DateTime(2026, 8, 2);
     HolidayService.debugOverrides = {
-      'karachi': [NationalHoliday(date: base.add(const Duration(days: 12)), name: 'Independence Day', countryCode: 'PK')],
-      'chiba': [NationalHoliday(date: base.add(const Duration(days: 9)), name: 'Mountain Day', countryCode: 'JP')],
-      'dublin': [NationalHoliday(date: base.add(const Duration(days: 85)), name: 'October Bank Holiday', countryCode: 'IE')],
-      'hattiesburg': [NationalHoliday(date: base.add(const Duration(days: 35)), name: 'Labor Day', countryCode: 'US')],
+      'karachi': [
+        NationalHoliday(
+          date: base.add(const Duration(days: 12)),
+          name: 'Independence Day',
+          countryCode: 'PK',
+        ),
+      ],
+      'chiba': [
+        NationalHoliday(
+          date: base.add(const Duration(days: 9)),
+          name: 'Mountain Day',
+          countryCode: 'JP',
+        ),
+      ],
+      'dublin': [
+        NationalHoliday(
+          date: base.add(const Duration(days: 85)),
+          name: 'October Bank Holiday',
+          countryCode: 'IE',
+        ),
+      ],
+      'hattiesburg': [
+        NationalHoliday(
+          date: base.add(const Duration(days: 35)),
+          name: 'Labor Day',
+          countryCode: 'US',
+        ),
+      ],
     };
   });
 
   tearDown(() {
     WeatherService.debugBundleOverrides = null;
-    WeatherService.debugOverrides = null;
     HolidayService.debugOverrides = null;
   });
 
@@ -115,7 +138,10 @@ void main() {
           themeMode: initial.themeMode,
           theme: PourToujoursTheme.build(initial.theme, Brightness.light),
           darkTheme: PourToujoursTheme.build(initial.theme, Brightness.dark),
-          home: PremiumHomeScreenV3(viewerName: viewer, onSwitchProfile: () {}),
+          home: PremiumHomeScreenV3(
+            viewerName: viewer,
+            onSwitchProfile: () {},
+          ),
         ),
       ),
     );
@@ -124,7 +150,11 @@ void main() {
   }
 
   void expectClean(WidgetTester tester) {
-    expect(tester.takeException(), isNull, reason: 'A layout, paint, or framework exception occurred.');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'A layout, paint, or framework exception occurred.',
+    );
   }
 
   for (final size in const [
@@ -134,24 +164,42 @@ void main() {
     Size(768, 1024),
     Size(1440, 900),
   ]) {
-    testWidgets('Foundation is clean at ${size.width}x${size.height}', (tester) async {
-      await pumpHome(tester, size);
-      expect(find.textContaining('Good '), findsOneWidget);
-      expect(find.text('Family now'), findsOneWidget);
-      expectClean(tester);
-      await tester.drag(find.byType(ListView).first, const Offset(0, -900));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('31'), findsWidgets);
-      expectClean(tester);
-    });
+    testWidgets(
+      'Foundation is clean at ${size.width}x${size.height}',
+      (tester) async {
+        await pumpHome(tester, size);
+        expect(find.textContaining('Good '), findsOneWidget);
+        expectClean(tester);
+
+        final mainList = find.byType(ListView).first;
+        await tester.scrollUntilVisible(
+          find.text('Family now'),
+          220,
+          scrollable: mainList,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Family now'), findsOneWidget);
+        expectClean(tester);
+
+        await tester.drag(mainList, const Offset(0, -900));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('31'), findsWidgets);
+        expectClean(tester);
+      },
+    );
   }
 
   for (final collection in PtThemeCollection.values) {
-    testWidgets('${collection.name} supports light and dark settings', (tester) async {
+    testWidgets('${collection.name} supports light and dark settings', (
+      tester,
+    ) async {
       await pumpHome(
         tester,
         const Size(390, 844),
-        initial: AppSettings(theme: collection, themeMode: ThemeMode.dark),
+        initial: AppSettings(
+          theme: collection,
+          themeMode: ThemeMode.dark,
+        ),
       );
       await tester.tap(find.text('Settings').last);
       await tester.pumpAndSettle();
@@ -162,18 +210,28 @@ void main() {
     });
   }
 
-  testWidgets('Settings changes units, clock, theme, and reduced motion', (tester) async {
+  testWidgets('Settings changes theme and reduced motion', (tester) async {
     final controller = await pumpHome(tester, const Size(390, 844));
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
+
     expect(find.text('Evergreen'), findsOneWidget);
     expect(find.text('Cherry Cola'), findsOneWidget);
-    expect(find.text('Reduce motion'), findsOneWidget);
     await tester.tap(find.text('Cherry Cola'));
     await tester.pump();
     expect(controller.value.theme, PtThemeCollection.cherryCola);
-    await tester.tap(find.text('Reduce motion'));
+
+    final settingsList = find.byType(ListView).first;
+    await tester.scrollUntilVisible(
+      find.text('Reduce motion'),
+      240,
+      scrollable: settingsList,
+    );
+    await tester.drag(settingsList, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Reduce motion'));
     await tester.pump();
+
     expect(controller.value.reducedMotion, isTrue);
     expectClean(tester);
   });
@@ -208,10 +266,18 @@ void main() {
       AppSettingsScope(
         controller: controller,
         child: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          data: const MediaQueryData(
+            textScaler: TextScaler.linear(1.5),
+          ),
           child: MaterialApp(
-            theme: PourToujoursTheme.build(settings.theme, Brightness.light),
-            home: const PremiumHomeScreenV3(viewerName: 'Hasan', onSwitchProfile: _noop),
+            theme: PourToujoursTheme.build(
+              settings.theme,
+              Brightness.light,
+            ),
+            home: const PremiumHomeScreenV3(
+              viewerName: 'Hasan',
+              onSwitchProfile: _noop,
+            ),
           ),
         ),
       ),
