@@ -2,7 +2,7 @@
 
 **Different hours. Same family.**
 
-Pour Toujours is a privacy-first family companion for people living across time zones. It helps a family understand local time, weather, holidays, birthdays, and sensible contact windows—without live location tracking or activity surveillance.
+Pour Toujours is a privacy-first Flutter family companion for people living across time zones. It combines local time, family routines, weather context, birthdays, and holidays without live location tracking or activity surveillance.
 
 The first private family circle is **Famile pour tojours**, spanning Karachi, Chiba, Dublin, and Hattiesburg.
 
@@ -11,52 +11,43 @@ The first private family circle is **Famile pour tojours**, spanning Karachi, Ch
 - See their world, not their whereabouts.
 - Useful even when only one family member installs it.
 - Home city, never background GPS.
-- Availability is an explained estimate, never a tracked status.
+- Every availability label includes a reason and confidence level.
+- Uncertainty is shown honestly instead of being disguised as a live status.
 - WhatsApp remains the communication layer; Pour Toujours provides context before contact.
-- Calm, beautiful, glanceable design instead of a dashboard aesthetic.
+- Premium, atmospheric design rather than a clock dashboard.
 
-## Current foundation
+## Current prototype
 
-- Flutter + Dart
-- Riverpod-ready application shell
-- Material 3 base with a custom Pour Toujours design system
-- fourteen seeded family profiles
-- four grouped city windows
-- original SVG app mark and city illustrations
-- first premium Today screen
+The v0.2 Flutter prototype includes:
+
+- cinematic family-horizon opening screen
+- live timezone-aware city clocks
+- fourteen family routine profiles
+- five honest availability states
+- confidence and explanation panels for every status
+- original SVG city artwork for Karachi, Chiba, Dublin, and Hattiesburg
+- grouped city windows
+- current-call guidance
+- privacy-first trust language
 
 ## Run locally
 
-Install the Flutter SDK, then clone and switch to the active branch:
-
-```bash
-git clone https://github.com/glitchmatrix-jpg/Pour-Toujors.git
-cd Pour-Toujors
+```powershell
+cd "$HOME\Documents\Pour-Toujors"
 git switch agent/initial-product-foundation
-```
-
-Generate the native platform folders once:
-
-```bash
-flutter create . --platforms=android,ios,web
+git pull
 flutter pub get
-flutter run
+flutter analyze
+flutter run -d chrome
 ```
 
-`flutter create .` may regenerate standard project metadata, but the existing `lib/`, `assets/`, and `pubspec.yaml` contain the authored product foundation.
+For Android, generate or retain the Android platform folder and run against a connected device or emulator.
 
-## Initial product scope
+## Next milestones
 
-- Living city windows for Karachi, Chiba, Dublin, and Hattiesburg
-- Local time and day
-- Weather and sunrise/sunset context
-- Estimated contact suitability
-- Birthdays and reminders
-- Public holidays and daylight-saving changes
-- Family time planner
-- WhatsApp shortcuts
-- Home-screen widgets
-
-## Asset policy
-
-The first visual pack is original and stored under `assets/`. Any future photography must have documented licensing and attribution requirements before being committed.
+1. Validate and refine v0.2 on phone-sized Android screens.
+2. Build the interactive 24-hour family overlap timeline.
+3. Add profile and routine editing.
+4. Integrate weather and public-holiday providers with caching.
+5. Add private accounts and claimed-profile controls.
+6. Build native Android and iOS widgets.
