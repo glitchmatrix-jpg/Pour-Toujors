@@ -1,0 +1,187 @@
+name: Android V1 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: APK build mode
+        required: true
+        default: both
+        type: choice
+        options: [debug, release, both]
+  push:
+    branches: [agent/initial-product-foundation]
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "test/**"
+      - "tool/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "CHANGELOG.md"
+      - "RELEASE_NOTES.md"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_CHANNEL: stable
+  JAVA_VERSION: "17"
+  APP_VERSION: "1.0.0"
+
+jobs:
+  validate-and-build:
+    name: Validate v1 and build signed QA APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Generate Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter create --platforms=android --org com.pourtoujours --project-name pour_toujours .
+          rm -f test/widget_test.dart
+          python3 tool/prepare_android_v1.py
+          python3 tool/prepare_android_widgets_v2.py
+
+      - name: Install Flutter packages
+        run: flutter pub get
+
+      - name: Verify source entrypoint formatting
+        run: dart format --output=none --set-exit-if-changed lib/main.dart
+
+      - name: Strict static analysis
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Deterministic responsive and platform QA
+        run: flutter test --reporter expanded
+
+      - name: Verify release identity and native contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest=android/app/src/main/AndroidManifest.xml
+          kotlin=android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
+          grep -F 'android:label="Pour Toujours"' "$manifest"
+          grep -F 'android.permission.INTERNET' "$manifest"
+          grep -F 'android.permission.POST_NOTIFICATIONS' "$manifest"
+          grep -F 'ScheduledNotificationReceiver' "$manifest"
+          for provider in World Cities Karachi Chiba Dublin Hattiesburg; do
+            grep -F ".PourToujours${provider}Widget" "$manifest"
+          done
+          for resource in world cities karachi chiba dublin hattiesburg; do
+            test -s "android/app/src/main/res/xml/pt_widget_${resource}_info.xml"
+          done
+          test -s android/app/src/main/res/layout/pt_widget_world.xml
+          test -s android/app/src/main/res/layout/pt_widget_cities.xml
+          test -s android/app/src/main/res/layout/pt_widget_city.xml
+          test -s android/app/src/main/res/drawable/pt_world_map.xml
+          for city in karachi chiba dublin hattiesburg; do
+            test -s "android/app/src/main/res/drawable/pt_scene_${city}_day.xml"
+            test -s "android/app/src/main/res/drawable/pt_scene_${city}_night.xml"
+          done
+          grep -F 'pourtoujours:///city/$city' "$kotlin"
+          grep -F 'Last refreshed in app' "$kotlin"
+          grep -F 'openCity(context, city)' "$kotlin"
+          grep -F 'pt_${city}_is_day' "$kotlin"
+          grep -F 'View.GONE' "$kotlin"
+          grep -F 'ClipRRect' lib/features/today/ambient_sky.dart
+          grep -F 'clipBehavior: Clip.hardEdge' lib/features/today/ambient_sky.dart
+          grep -F '_controller.repeat()' lib/features/today/ambient_sky.dart
+          ! grep -F 'ACCESS_FINE_LOCATION' "$manifest"
+          ! grep -F 'ACCESS_COARSE_LOCATION' "$manifest"
+          grep -F 'version: 1.0.0+10' pubspec.yaml
+          grep -F 'isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
+          test -s assets/brand/pour_toujours_mark.svg
+          test -s CHANGELOG.md
+          test -s RELEASE_NOTES.md
+
+      - name: Build debug APK
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
+        run: flutter build apk --debug --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
+
+      - name: Build signed release QA APK
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
+        run: flutter build apk --release --build-name=${{ env.APP_VERSION }} --build-number=${{ github.run_number }}
+
+      - name: Verify APK signatures
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            jarsigner -verify "$apk" >/dev/null
+          done
+
+      - name: Collect APKs checksums and metadata
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
+          if compgen -G 'dist/*.apk' > /dev/null; then
+            (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+            cat > dist/BUILD_METADATA.txt <<EOF
+          app=Pour Toujours
+          version=${APP_VERSION}
+          run_number=${GITHUB_RUN_NUMBER}
+          commit=${GITHUB_SHA}
+          flutter=$(flutter --version | head -1)
+          signing=QA signature; not a Play Store production key
+          EOF
+          else
+            echo "No APK was produced because a required quality gate failed."
+          fi
+
+      - name: Upload debug APK
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pour-toujours-v1-debug-${{ github.run_number }}
+          path: |
+            dist/app-debug.apk
+            dist/SHA256SUMS.txt
+            dist/BUILD_METADATA.txt
+          if-no-files-found: error
+          retention-days: 21
+          compression-level: 0
+
+      - name: Upload signed release QA APK
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pour-toujours-v1-release-qa-${{ github.run_number }}
+          path: |
+            dist/app-release.apk
+            dist/SHA256SUMS.txt
+            dist/BUILD_METADATA.txt
+            CHANGELOG.md
+            RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
