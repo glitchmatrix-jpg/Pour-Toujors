@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
@@ -41,6 +42,8 @@ class FamilyWeatherAlert {
   bool get isInterruptive =>
       severity == WeatherAlertSeverity.severe ||
       severity == WeatherAlertSeverity.extreme;
+
+  bool get isEarthquake => event.toLowerCase().contains('earthquake');
 }
 
 class WeatherAlertService {
@@ -48,23 +51,51 @@ class WeatherAlertService {
       : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _hattiesburg = (31.3271, -89.2903);
+
+  static const _cityCoordinates = <String, (double, double)>{
+    'karachi': (24.8607, 67.0011),
+    'chiba': (35.6074, 140.1065),
+    'dublin': (53.3498, -6.2603),
+    'hattiesburg': (31.3271, -89.2903),
+  };
+
   static Map<String, List<FamilyWeatherAlert>>? debugOfficialOverrides;
+  static Map<String, List<FamilyWeatherAlert>>? debugEarthquakeOverrides;
+
+  static List<_EarthquakeEvent>? _earthquakeCache;
+  static DateTime? _earthquakeCacheTime;
+  static Future<List<_EarthquakeEvent>>? _earthquakeInFlight;
+  static const _earthquakeCacheLifetime = Duration(minutes: 5);
 
   Future<List<FamilyWeatherAlert>> fetchOfficialForCity(String cityId) async {
-    final debug = debugOfficialOverrides;
-    if (debug != null) return debug[cityId] ?? const [];
-    if (cityId != 'hattiesburg') return const [];
+    final weatherDebug = debugOfficialOverrides;
+    final earthquakeDebug = debugEarthquakeOverrides;
+    if (weatherDebug != null || earthquakeDebug != null) {
+      return [
+        ...?weatherDebug?[cityId],
+        ...?earthquakeDebug?[cityId],
+      ];
+    }
 
+    final results = await Future.wait<List<FamilyWeatherAlert>>([
+      _fetchWeatherAlerts(cityId),
+      _fetchEarthquakeReports(cityId),
+    ]);
+    return [...results[0], ...results[1]];
+  }
+
+  Future<List<FamilyWeatherAlert>> _fetchWeatherAlerts(String cityId) async {
+    if (cityId != 'hattiesburg') return const [];
+    final point = _cityCoordinates[cityId]!;
     final uri = Uri.https('api.weather.gov', '/alerts/active', {
-      'point': '${_hattiesburg.$1},${_hattiesburg.$2}',
+      'point': '${point.$1},${point.$2}',
       'status': 'actual',
       'message_type': 'alert',
     });
     try {
       final response = await _client.get(uri, headers: const {
         'Accept': 'application/geo+json',
-        'User-Agent': 'PourToujours/0.8 (family-weather-app)',
+        'User-Agent': 'PourToujours/1.0 (family-awareness-app)',
       }).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return const [];
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -78,7 +109,8 @@ class WeatherAlertService {
           cityId: cityId,
           event: event,
           headline: (properties['headline'] as String?) ?? event,
-          instruction: _instruction(event, properties['instruction'] as String?),
+          instruction:
+              _instruction(event, properties['instruction'] as String?),
           source: WeatherAlertSource.official,
           severity: _severity(properties['severity'] as String?),
           effective: _date(properties['effective']),
@@ -92,6 +124,132 @@ class WeatherAlertService {
     } catch (_) {
       return const [];
     }
+  }
+
+  Future<List<FamilyWeatherAlert>> _fetchEarthquakeReports(
+    String cityId,
+  ) async {
+    final city = _cityCoordinates[cityId];
+    if (city == null) return const [];
+    try {
+      final events = await _earthquakes();
+      final reports = <FamilyWeatherAlert>[];
+      for (final quake in events) {
+        final distance = _distanceKm(
+          city.$1,
+          city.$2,
+          quake.latitude,
+          quake.longitude,
+        );
+        if (!_isRelevantEarthquake(quake.magnitude, distance)) continue;
+        final magnitude = quake.magnitude.toStringAsFixed(1);
+        final roundedDistance = distance.round();
+        reports.add(
+          FamilyWeatherAlert(
+            id: 'usgs-${quake.id}-$cityId',
+            cityId: cityId,
+            event: 'Earthquake report · M$magnitude',
+            headline:
+                'M$magnitude earthquake reported $roundedDistance km from ${_cityName(cityId)}',
+            instruction:
+                'This is rapid earthquake reporting, not advance warning. '
+                'If shaking is occurring, Drop, Cover, and Hold On. After shaking, '
+                'check local emergency guidance and avoid damaged structures.',
+            source: WeatherAlertSource.official,
+            severity: _earthquakeSeverity(quake.magnitude, distance),
+            effective: quake.time,
+            expires: quake.time.add(const Duration(hours: 24)),
+            urgency: quake.magnitude >= 6 ? 'Immediate' : 'Expected',
+            certainty: 'Observed',
+            area: quake.place,
+            attribution: 'U.S. Geological Survey',
+          ),
+        );
+      }
+      reports.sort((a, b) {
+        final severity = b.severity.index.compareTo(a.severity.index);
+        if (severity != 0) return severity;
+        return (b.effective ?? DateTime.fromMillisecondsSinceEpoch(0))
+            .compareTo(a.effective ?? DateTime.fromMillisecondsSinceEpoch(0));
+      });
+      return reports.take(3).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<_EarthquakeEvent>> _earthquakes() async {
+    final now = DateTime.now();
+    final cached = _earthquakeCache;
+    final cachedAt = _earthquakeCacheTime;
+    if (cached != null &&
+        cachedAt != null &&
+        now.difference(cachedAt) < _earthquakeCacheLifetime) {
+      return cached;
+    }
+    final existing = _earthquakeInFlight;
+    if (existing != null) return existing;
+    final request = _requestEarthquakes();
+    _earthquakeInFlight = request;
+    try {
+      final events = await request;
+      _earthquakeCache = events;
+      _earthquakeCacheTime = now;
+      return events;
+    } finally {
+      _earthquakeInFlight = null;
+    }
+  }
+
+  Future<List<_EarthquakeEvent>> _requestEarthquakes() async {
+    final uri = Uri.https(
+      'earthquake.usgs.gov',
+      '/earthquakes/feed/v1.0/summary/all_day.geojson',
+    );
+    final response = await _client.get(uri, headers: const {
+      'Accept': 'application/geo+json, application/json',
+      'User-Agent': 'PourToujours/1.0 (family-awareness-app)',
+    }).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) return const [];
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final features = body['features'] as List<dynamic>? ?? const [];
+    final events = <_EarthquakeEvent>[];
+    for (final raw in features) {
+      if (raw is! Map<String, dynamic>) continue;
+      final properties = raw['properties'];
+      final geometry = raw['geometry'];
+      if (properties is! Map<String, dynamic> ||
+          geometry is! Map<String, dynamic>) {
+        continue;
+      }
+      final coordinates = geometry['coordinates'];
+      final magnitude = properties['mag'];
+      final milliseconds = properties['time'];
+      if (coordinates is! List ||
+          coordinates.length < 2 ||
+          magnitude is! num ||
+          milliseconds is! num) {
+        continue;
+      }
+      final longitude = coordinates[0];
+      final latitude = coordinates[1];
+      if (longitude is! num || latitude is! num) continue;
+      events.add(
+        _EarthquakeEvent(
+          id: (raw['id'] as String?) ??
+              '${milliseconds.toInt()}-${magnitude.toDouble()}',
+          magnitude: magnitude.toDouble(),
+          longitude: longitude.toDouble(),
+          latitude: latitude.toDouble(),
+          time: DateTime.fromMillisecondsSinceEpoch(
+            milliseconds.toInt(),
+            isUtc: true,
+          ),
+          place: (properties['place'] as String?) ?? 'Location not provided',
+        ),
+      );
+    }
+    return events;
   }
 
   List<FamilyWeatherAlert> derive(String cityId, WeatherBundle bundle) {
@@ -195,6 +353,56 @@ class WeatherAlertService {
     return alerts;
   }
 
+  static bool _isRelevantEarthquake(double magnitude, double distanceKm) {
+    if (magnitude >= 6 && distanceKm <= 1500) return true;
+    if (magnitude >= 5 && distanceKm <= 800) return true;
+    if (magnitude >= 4 && distanceKm <= 300) return true;
+    return magnitude >= 3 && distanceKm <= 100;
+  }
+
+  static WeatherAlertSeverity _earthquakeSeverity(
+    double magnitude,
+    double distanceKm,
+  ) {
+    if (magnitude >= 7 || (magnitude >= 6.5 && distanceKm <= 300)) {
+      return WeatherAlertSeverity.extreme;
+    }
+    if (magnitude >= 6 || (magnitude >= 5.5 && distanceKm <= 150)) {
+      return WeatherAlertSeverity.severe;
+    }
+    if (magnitude >= 5 || (magnitude >= 4 && distanceKm <= 100)) {
+      return WeatherAlertSeverity.moderate;
+    }
+    return WeatherAlertSeverity.minor;
+  }
+
+  static double _distanceKm(
+    double latitudeA,
+    double longitudeA,
+    double latitudeB,
+    double longitudeB,
+  ) {
+    const radius = 6371.0;
+    final latitudeDelta = _radians(latitudeB - latitudeA);
+    final longitudeDelta = _radians(longitudeB - longitudeA);
+    final a = math.sin(latitudeDelta / 2) * math.sin(latitudeDelta / 2) +
+        math.cos(_radians(latitudeA)) *
+            math.cos(_radians(latitudeB)) *
+            math.sin(longitudeDelta / 2) *
+            math.sin(longitudeDelta / 2);
+    return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  static double _radians(double degrees) => degrees * math.pi / 180;
+
+  static String _cityName(String cityId) => switch (cityId) {
+        'karachi' => 'Karachi',
+        'chiba' => 'Chiba',
+        'dublin' => 'Dublin',
+        'hattiesburg' => 'Hattiesburg',
+        _ => cityId,
+      };
+
   static WeatherAlertSeverity _severity(String? value) =>
       switch (value?.toLowerCase()) {
         'extreme' => WeatherAlertSeverity.extreme,
@@ -223,4 +431,22 @@ class WeatherAlertService {
     }
     return 'Follow local authority guidance and monitor official updates.';
   }
+}
+
+class _EarthquakeEvent {
+  const _EarthquakeEvent({
+    required this.id,
+    required this.magnitude,
+    required this.longitude,
+    required this.latitude,
+    required this.time,
+    required this.place,
+  });
+
+  final String id;
+  final double magnitude;
+  final double longitude;
+  final double latitude;
+  final DateTime time;
+  final String place;
 }
