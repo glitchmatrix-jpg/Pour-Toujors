@@ -16,7 +16,7 @@ import '../../data/family_seed.dart';
 import '../navigation/detail_placeholders.dart';
 import '../people/people_calendar_experience.dart';
 import '../settings/settings_screen.dart';
-import '../today/living_today_screen.dart';
+import '../today/simple_today_screen.dart';
 
 class PremiumHomeScreenV3 extends StatefulWidget {
   const PremiumHomeScreenV3({
@@ -152,7 +152,7 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3>
         ),
     };
     final pages = [
-      LivingTodayScreen(
+      SimpleTodayScreen(
         viewer: viewer,
         snapshots: snapshots,
         weatherFutures: _weatherFutures,
@@ -214,23 +214,10 @@ class _PeoplePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
       children: [
-        PtPageHeader(
+        const PtPageHeader(
           title: 'People',
           subtitle:
-              'Every relationship and local context is shown from ${viewer.name}’s point of view.',
-        ),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            PourToujoursRouteNames.overlapPlanner,
-            arguments: DetailRouteArgs(
-              title: 'Family contact planner',
-              viewerName: viewer.name,
-            ),
-          ),
-          icon: const Icon(Icons.groups_2_outlined),
-          label: const Text('Plan a call'),
+              'Local time, city, and routine-based availability. Relationships follow the selected profile.',
         ),
         const SizedBox(height: 18),
         for (final member in familyMembers) ...[
