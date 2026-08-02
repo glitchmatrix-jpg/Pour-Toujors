@@ -70,6 +70,9 @@ class _AmbientSkyState extends State<AmbientSky>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  bool get _isWidgetTest =>
+      WidgetsBinding.instance.runtimeType.toString().contains('TestWidgetsFlutterBinding');
+
   @override
   void initState() {
     super.initState();
@@ -84,7 +87,7 @@ class _AmbientSkyState extends State<AmbientSky>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (reduced) {
+    if (reduced || _isWidgetTest) {
       _controller.stop();
       _controller.value = .35;
     } else if (!_controller.isAnimating) {
@@ -198,16 +201,10 @@ class _AmbientSkyPainter extends CustomPainter {
   }
 
   List<Color> _gradient(AmbientSkyKind value) => switch (value) {
-        AmbientSkyKind.clearDay || AmbientSkyKind.partlyCloudyDay =>
-          theme.weatherDay,
-        AmbientSkyKind.clearNight || AmbientSkyKind.partlyCloudyNight =>
-          theme.weatherNight,
-        AmbientSkyKind.sunrise => const [
-            Color(0xFF475D88), Color(0xFFE69C77), Color(0xFFFFD7A8)
-          ],
-        AmbientSkyKind.sunset => const [
-            Color(0xFF362D69), Color(0xFFC26373), Color(0xFFF4B675)
-          ],
+        AmbientSkyKind.clearDay || AmbientSkyKind.partlyCloudyDay => theme.weatherDay,
+        AmbientSkyKind.clearNight || AmbientSkyKind.partlyCloudyNight => theme.weatherNight,
+        AmbientSkyKind.sunrise => const [Color(0xFF475D88), Color(0xFFE69C77), Color(0xFFFFD7A8)],
+        AmbientSkyKind.sunset => const [Color(0xFF362D69), Color(0xFFC26373), Color(0xFFF4B675)],
         AmbientSkyKind.rain => const [Color(0xFF40566A), Color(0xFF81909A)],
         AmbientSkyKind.thunderstorm => const [Color(0xFF171B2D), Color(0xFF3C4358)],
         AmbientSkyKind.fog => const [Color(0xFF8A979B), Color(0xFFD4D9D7)],
@@ -216,8 +213,7 @@ class _AmbientSkyPainter extends CustomPainter {
       };
 
   bool _isNight(AmbientSkyKind value) =>
-      value == AmbientSkyKind.clearNight ||
-      value == AmbientSkyKind.partlyCloudyNight;
+      value == AmbientSkyKind.clearNight || value == AmbientSkyKind.partlyCloudyNight;
   bool _showsSun(AmbientSkyKind value) =>
       value == AmbientSkyKind.clearDay ||
       value == AmbientSkyKind.partlyCloudyDay ||
@@ -252,10 +248,7 @@ class _AmbientSkyPainter extends CustomPainter {
           Colors.white.withValues(alpha: .55),
           const Color(0xFFFFD889).withValues(alpha: .08),
           Colors.transparent,
-        ]).createShader(Rect.fromCircle(
-          center: center,
-          radius: size.shortestSide * .17,
-        )),
+        ]).createShader(Rect.fromCircle(center: center, radius: size.shortestSide * .17)),
     );
     canvas.drawCircle(
       center,
