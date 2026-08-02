@@ -128,7 +128,7 @@ jobs:
               ),
               (
                   'height: 220,\n          clipBehavior: Clip.antiAlias,',
-                  'height: 244,\n          clipBehavior: Clip.antiAlias,',
+                  'height: 252,\n          clipBehavior: Clip.antiAlias,',
                   'live weather card height',
               ),
               (
@@ -140,6 +140,35 @@ jobs:
                   'else if (weather == null)',
                   'else if (weather == null || !weather.isLive)',
                   'offline weather guard',
+              ),
+              (
+                  '''Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              weather.condition,
+                              style: TextStyle(
+                                color: secondary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),''',
+                  '''Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 5),
+                              child: Text(
+                                weather.condition,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: secondary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),''',
+                  'responsive weather condition',
               ),
           ]
 
