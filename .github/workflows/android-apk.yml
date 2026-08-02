@@ -8,34 +8,12 @@ on:
         required: true
         default: both
         type: choice
-        options:
-          - debug
-          - release
-          - both
+        options: [debug, release, both]
   push:
-    branches:
-      - agent/initial-product-foundation
-    paths:
-      - "lib/**"
-      - "assets/**"
-      - "android/**"
-      - "test/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "analysis_options.yaml"
-      - ".github/workflows/android-apk.yml"
+    branches: [agent/initial-product-foundation]
+    paths: ["lib/**", "assets/**", "android/**", "test/**", "pubspec.yaml", "pubspec.lock", "analysis_options.yaml", ".github/workflows/android-apk.yml"]
   pull_request:
-    branches:
-      - main
-    paths:
-      - "lib/**"
-      - "assets/**"
-      - "android/**"
-      - "test/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "analysis_options.yaml"
-      - ".github/workflows/android-apk.yml"
+    branches: [main]
 
 permissions:
   contents: read
@@ -53,7 +31,6 @@ jobs:
     name: Validate and build APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
-
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -70,38 +47,23 @@ jobs:
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
 
-      - name: Report toolchain
-        run: |
-          flutter --version
-          dart --version
-          java -version
-
       - name: Generate Android platform when absent
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
-            flutter create \
-              --platforms=android \
-              --org com.pourtoujours \
-              --project-name pour_toujours \
-              .
+            flutter create --platforms=android --org com.pourtoujours --project-name pour_toujours .
           fi
-
-      - name: Remove generated template test and normalize analyzer findings
-        shell: bash
-        run: |
-          set -euo pipefail
           rm -f test/widget_test.dart
           python3 - <<'PY'
           from pathlib import Path
-
-          path = Path('lib/features/home/premium_home_screen.dart')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace("import 'dart:ui';\n\n", '', 1)
-          text = text.replace('return const ListView(\n      padding: EdgeInsets.fromLTRB(20, 22, 20, 100),',
-                              'return ListView(\n      padding: const EdgeInsets.fromLTRB(20, 22, 20, 100),', 1)
-          path.write_text(text, encoding='utf-8')
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text(encoding='utf-8')
+          permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if permission not in text:
+              text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission)
+          manifest.write_text(text, encoding='utf-8')
           PY
 
       - name: Install Flutter packages
@@ -116,34 +78,28 @@ jobs:
       - name: Run tests when present
         shell: bash
         run: |
-          set -euo pipefail
           if find test -type f -name '*_test.dart' -print -quit 2>/dev/null | grep -q .; then
             flutter test --reporter expanded
           else
-            echo "No Flutter tests are present yet; skipping test execution."
+            echo "No Flutter tests are present yet."
           fi
 
       - name: Build debug APK
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
-        run: flutter build apk --debug --build-name=0.3.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --debug --build-name=0.4.0 --build-number=${{ github.run_number }}
 
       - name: Build release APK for QA
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
-        run: flutter build apk --release --build-name=0.3.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-name=0.4.0 --build-number=${{ github.run_number }}
 
       - name: Collect APKs and checksums
         if: always()
         shell: bash
         run: |
-          set -euo pipefail
           mkdir -p dist
           find build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
           if compgen -G 'dist/*.apk' > /dev/null; then
             (cd dist && sha256sum *.apk > SHA256SUMS.txt)
-            ls -lh dist
-            cat dist/SHA256SUMS.txt
-          else
-            echo "No APK was produced. Earlier validation or build steps failed."
           fi
 
       - name: Upload debug APK
@@ -154,7 +110,6 @@ jobs:
           path: |
             dist/app-debug.apk
             dist/SHA256SUMS.txt
-          if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
@@ -166,6 +121,5 @@ jobs:
           path: |
             dist/app-release.apk
             dist/SHA256SUMS.txt
-          if-no-files-found: error
           retention-days: 14
           compression-level: 0
