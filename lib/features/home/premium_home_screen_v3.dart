@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../app/design/pt_components.dart';
 import '../../app/theme/pour_toujours_theme.dart';
 import '../../core/alerts/weather_alert_service.dart';
+import '../../core/release/v1_platform_services.dart';
 import '../../core/time/availability_engine.dart';
 import '../../core/time/timezone_intelligence.dart';
 import '../../core/weather/weather_models.dart';
@@ -29,7 +32,8 @@ class PremiumHomeScreenV3 extends StatefulWidget {
   State<PremiumHomeScreenV3> createState() => _PremiumHomeScreenV3State();
 }
 
-class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3> {
+class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3>
+    with WidgetsBindingObserver {
   final _weather = WeatherService();
   final _alerts = WeatherAlertService();
   final _timezone = TimezoneIntelligenceService();
@@ -39,8 +43,32 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     PourToujoursRoutes.viewerName = widget.viewerName;
     _reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _publishWidgetSnapshot());
+  }
+
+  @override
+  void didUpdateWidget(covariant PremiumHomeScreenV3 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewerName != widget.viewerName) {
+      PourToujoursRoutes.viewerName = widget.viewerName;
+      _publishWidgetSnapshot();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _publishWidgetSnapshot();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   void _reload({bool force = false}) {
@@ -48,6 +76,67 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3> {
       for (final city in cities)
         city.id: _weather.fetchBundle(city.id, forceRefresh: force),
     };
+  }
+
+  Future<void> _publishWidgetSnapshot() async {
+    try {
+      final now = DateTime.now();
+      final snapshots = {
+        for (final member in familyMembers)
+          member.name: evaluateAvailability(
+            member: member,
+            city: cities.firstWhere((city) => city.id == member.cityId),
+          ),
+      };
+      final free = familyMembers
+          .where(
+            (member) =>
+                member.name != widget.viewerName &&
+                snapshots[member.name]?.kind == AvailabilityKind.likelyFree,
+          )
+          .toList();
+      final primary = free.isEmpty
+          ? 'Family across four cities'
+          : '${free.length} ${free.length == 1 ? 'person is' : 'people are'} likely free';
+      final secondary = free.isEmpty
+          ? 'Open the app for routine-based availability'
+          : free.take(3).map((member) => member.name).join(' · ');
+      final cityLine = cities.map((city) {
+        final local = tz.TZDateTime.now(tz.getLocation(city.timezone));
+        return '${city.name} ${DateFormat('h:mm a').format(local)}';
+      }).join('  •  ');
+
+      final viewer = familyMembers.firstWhere(
+        (member) => member.name == widget.viewerName,
+      );
+      final viewerCity = cities.firstWhere((city) => city.id == viewer.cityId);
+      final viewerLocal = tz.TZDateTime.now(tz.getLocation(viewerCity.timezone));
+      final timeline =
+          '${viewer.name} · ${viewerCity.name} ${DateFormat('h:mm a').format(viewerLocal)} · ${snapshots[viewer.name]?.label ?? 'Unknown'}';
+
+      final events = await FamilyEventStore().load();
+      final upcoming = events
+          .where((event) => event.utcStart.isAfter(now.toUtc()))
+          .toList()
+        ..sort((first, second) => first.utcStart.compareTo(second.utcStart));
+      final nextEvent = upcoming.isEmpty
+          ? 'No upcoming saved family event'
+          : '${upcoming.first.title} · ${DateFormat('EEE d MMM, h:mm a').format(upcoming.first.utcStart.toLocal())}';
+
+      await V1PlatformServices.instance.updateHomeWidgets(
+        WidgetSnapshot(
+          primaryLine: primary,
+          secondaryLine: secondary,
+          citiesLine: cityLine,
+          timelineLine: timeline,
+          nextEventLine: nextEvent,
+          alertLine: 'No important alert cached',
+          updatedAt: now,
+        ),
+      );
+    } on Object catch (error, stackTrace) {
+      debugPrint('Widget snapshot publishing failed safely: $error\n$stackTrace');
+    }
   }
 
   @override
@@ -69,7 +158,10 @@ class _PremiumHomeScreenV3State extends State<PremiumHomeScreenV3> {
         weatherFutures: _weatherFutures,
         alerts: _alerts,
         timezone: _timezone,
-        onRefresh: () async => setState(() => _reload(force: true)),
+        onRefresh: () async {
+          setState(() => _reload(force: true));
+          await _publishWidgetSnapshot();
+        },
       ),
       _PeoplePage(viewer: viewer, snapshots: snapshots),
       FamilyCalendarScreen(viewerName: viewer.name),
@@ -122,60 +214,83 @@ class _PeoplePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
       children: [
-        const PtPageHeader(
+        PtPageHeader(
           title: 'People',
-          subtitle: 'Relationships, local context, and routine-based availability relative to you.',
+          subtitle:
+              'Every relationship and local context is shown from ${viewer.name}’s point of view.',
         ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  PourToujoursRouteNames.overlapPlanner,
-                  arguments: DetailRouteArgs(
-                    title: 'Family contact planner',
-                    viewerName: viewer.name,
-                  ),
-                ),
-                icon: const Icon(Icons.groups_2_outlined),
-                label: const Text('Plan a call'),
-              ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pushNamed(
+            context,
+            PourToujoursRouteNames.overlapPlanner,
+            arguments: DetailRouteArgs(
+              title: 'Family contact planner',
+              viewerName: viewer.name,
             ),
-          ],
+          ),
+          icon: const Icon(Icons.groups_2_outlined),
+          label: const Text('Plan a call'),
         ),
         const SizedBox(height: 18),
         for (final member in familyMembers) ...[
-          Card(
-            child: ListTile(
-              onTap: () => Navigator.pushNamed(
-                context,
-                PourToujoursRouteNames.person,
-                arguments: DetailRouteArgs(
-                  title: member.name,
-                  subtitle: relationshipFor(viewer: viewer, person: member),
-                  payload: PersonRoutePayload(
-                    personName: member.name,
+          Semantics(
+            button: true,
+            label:
+                '${member.name}, ${familyGraph.relationship(viewer: viewer.name, person: member.name)}, ${snapshots[member.name]!.label}',
+            child: Card(
+              child: ListTile(
+                minVerticalPadding: 14,
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  PourToujoursRouteNames.person,
+                  arguments: DetailRouteArgs(
+                    title: member.name,
+                    subtitle: relationshipFor(viewer: viewer, person: member),
+                    payload: PersonRoutePayload(
+                      personName: member.name,
+                      viewerName: viewer.name,
+                    ),
                     viewerName: viewer.name,
                   ),
-                  viewerName: viewer.name,
                 ),
-              ),
-              leading: CircleAvatar(child: Text(member.initials)),
-              title: Text(member.name),
-              subtitle: Text(
-                '${familyGraph.relationship(viewer: viewer.name, person: member.name)} · ${cities.firstWhere((city) => city.id == member.cityId).name}',
-              ),
-              trailing: Text(
-                snapshots[member.name]!.label,
-                style: TextStyle(
-                  color: _availabilityColor(
-                    context,
-                    snapshots[member.name]!.kind,
+                leading: CircleAvatar(
+                  backgroundColor: context.pt.globeAccent.withValues(alpha: .14),
+                  child: Text(
+                    member.initials,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+                ),
+                title: Text(
+                  member.name,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${familyGraph.relationship(viewer: viewer.name, person: member.name)} · ${cities.firstWhere((city) => city.id == member.cityId).name}',
+                  ),
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _availabilityColor(
+                      context,
+                      snapshots[member.name]!.kind,
+                    ).withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    snapshots[member.name]!.label,
+                    style: TextStyle(
+                      color: _availabilityColor(
+                        context,
+                        snapshots[member.name]!.kind,
+                      ),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -183,8 +298,8 @@ class _PeoplePage extends StatelessWidget {
           const SizedBox(height: 10),
         ],
         ExpansionTile(
-          title: const Text('Family graph needs input'),
-          subtitle: const Text('Unknown links are never inferred.'),
+          title: const Text('Unmapped family details'),
+          subtitle: const Text('Unknown links are shown honestly, never guessed.'),
           children: [
             for (final note in familyGraph.missingLinks)
               ListTile(
