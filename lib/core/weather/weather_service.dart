@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'weather_models.dart';
+
 class CityWeather {
   const CityWeather({
     required this.temperature,
@@ -29,17 +31,7 @@ class CityWeather {
   final DateTime sunset;
   final bool isLive;
 
-  String get condition {
-    if (!isLive) return 'Weather unavailable';
-    if (code == 0) return 'Clear';
-    if (code <= 3) return 'Partly cloudy';
-    if (code == 45 || code == 48) return 'Foggy';
-    if (code >= 51 && code <= 67) return 'Rain';
-    if (code >= 71 && code <= 77) return 'Snow';
-    if (code >= 80 && code <= 82) return 'Showers';
-    if (code >= 95) return 'Thunderstorms';
-    return 'Mixed weather';
-  }
+  String get condition => isLive ? weatherCodeLabel(code) : 'Weather unavailable';
 
   String get practicalLine {
     if (!isLive) return 'Pull down to retry live weather';
@@ -53,6 +45,10 @@ class CityWeather {
 }
 
 class WeatherService {
+  WeatherService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   static const coordinates = <String, (double, double)>{
     'karachi': (24.8607, 67.0011),
     'chiba': (35.6074, 140.1065),
@@ -60,49 +56,206 @@ class WeatherService {
     'hattiesburg': (31.3271, -89.2903),
   };
 
-  /// Test-only deterministic values. Production leaves this null.
-  static Map<String, CityWeather>? debugOverrides;
+  static final Map<String, WeatherBundle> _cache = {};
+  static final Map<String, Future<WeatherBundle>> _inFlight = {};
+  static const cacheLifetime = Duration(minutes: 20);
 
-  Future<CityWeather> fetch(String cityId) async {
+  /// Deterministic compatibility override used by widget tests.
+  static Map<String, CityWeather>? debugOverrides;
+  static Map<String, WeatherBundle>? debugBundleOverrides;
+
+  Future<CityWeather> fetch(String cityId, {bool forceRefresh = false}) async {
     final override = debugOverrides?[cityId];
     if (override != null) return override;
-
     try {
-      final point = coordinates[cityId]!;
-      final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
-        'latitude': '${point.$1}',
-        'longitude': '${point.$2}',
-        'current':
-            'temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m',
-        'hourly': 'precipitation_probability',
-        'daily': 'temperature_2m_max,temperature_2m_min,sunrise,sunset',
-        'forecast_days': '1',
-        'timezone': 'auto',
-      });
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return _offline();
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final current = data['current'] as Map<String, dynamic>;
-      final daily = data['daily'] as Map<String, dynamic>;
-      final hourly = data['hourly'] as Map<String, dynamic>;
-      final rain = (hourly['precipitation_probability'] as List).cast<num>();
+      final bundle = await fetchBundle(cityId, forceRefresh: forceRefresh);
+      final today = bundle.daily.first;
       return CityWeather(
-        temperature: (current['temperature_2m'] as num).toDouble(),
-        feelsLike: (current['apparent_temperature'] as num).toDouble(),
-        windSpeed: (current['wind_speed_10m'] as num).toDouble(),
-        code: (current['weather_code'] as num).toInt(),
-        isDay: (current['is_day'] as num).toInt() == 1,
-        high: ((daily['temperature_2m_max'] as List).first as num).toDouble(),
-        low: ((daily['temperature_2m_min'] as List).first as num).toDouble(),
-        rainChance:
-            rain.isEmpty ? 0 : rain.reduce((a, b) => a > b ? a : b).toInt(),
-        sunrise: DateTime.parse((daily['sunrise'] as List).first as String),
-        sunset: DateTime.parse((daily['sunset'] as List).first as String),
+        temperature: bundle.current.temperature,
+        feelsLike: bundle.current.feelsLike,
+        windSpeed: bundle.current.windSpeed,
+        code: bundle.current.weatherCode,
+        isDay: bundle.current.isDay,
+        high: today.high,
+        low: today.low,
+        rainChance: today.precipitationProbability,
+        sunrise: today.sunrise,
+        sunset: today.sunset,
       );
     } catch (_) {
       return _offline();
     }
   }
+
+  Future<WeatherBundle> fetchBundle(
+    String cityId, {
+    bool forceRefresh = false,
+  }) async {
+    final debug = debugBundleOverrides?[cityId];
+    if (debug != null) return debug;
+
+    final cached = _cache[cityId];
+    final fresh = cached != null &&
+        DateTime.now().difference(cached.updatedAt) < cacheLifetime;
+    if (!forceRefresh && fresh) return cached;
+    if (!forceRefresh && _inFlight[cityId] case final request?) return request;
+
+    final request = _request(cityId);
+    _inFlight[cityId] = request;
+    try {
+      final result = await request;
+      _cache[cityId] = result;
+      return result;
+    } catch (_) {
+      if (cached != null) return cached.copyWith(isStale: true);
+      rethrow;
+    } finally {
+      _inFlight.remove(cityId);
+    }
+  }
+
+  Future<WeatherBundle> _request(String cityId) async {
+    final point = coordinates[cityId];
+    if (point == null) throw ArgumentError.value(cityId, 'cityId');
+
+    final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
+      'latitude': '${point.$1}',
+      'longitude': '${point.$2}',
+      'current': [
+        'temperature_2m',
+        'apparent_temperature',
+        'weather_code',
+        'is_day',
+        'precipitation',
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'wind_direction_10m',
+        'relative_humidity_2m',
+        'visibility',
+        'uv_index',
+        'cloud_cover',
+        'surface_pressure',
+      ].join(','),
+      'hourly': [
+        'temperature_2m',
+        'apparent_temperature',
+        'weather_code',
+        'precipitation_probability',
+        'precipitation',
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'relative_humidity_2m',
+        'uv_index',
+        'visibility',
+      ].join(','),
+      'daily': [
+        'weather_code',
+        'temperature_2m_max',
+        'temperature_2m_min',
+        'precipitation_probability_max',
+        'precipitation_sum',
+        'wind_speed_10m_max',
+        'wind_gusts_10m_max',
+        'sunrise',
+        'sunset',
+        'daylight_duration',
+        'uv_index_max',
+      ].join(','),
+      'forecast_days': '7',
+      'timezone': 'auto',
+    });
+
+    final response = await _client
+        .get(uri, headers: const {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw http.ClientException('Weather request failed: ${response.statusCode}', uri);
+    }
+    return _parse(cityId, jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  WeatherBundle _parse(String cityId, Map<String, dynamic> data) {
+    final current = data['current'] as Map<String, dynamic>;
+    final hourly = data['hourly'] as Map<String, dynamic>;
+    final daily = data['daily'] as Map<String, dynamic>;
+
+    final hourlyTimes = _strings(hourly, 'time');
+    final hourlyItems = List<HourlyWeather>.generate(hourlyTimes.length, (index) {
+      return HourlyWeather(
+        time: DateTime.parse(hourlyTimes[index]),
+        temperature: _numberAt(hourly, 'temperature_2m', index),
+        feelsLike: _numberAt(hourly, 'apparent_temperature', index),
+        weatherCode: _intAt(hourly, 'weather_code', index),
+        precipitationProbability: _intAt(hourly, 'precipitation_probability', index),
+        precipitation: _numberAt(hourly, 'precipitation', index),
+        windSpeed: _numberAt(hourly, 'wind_speed_10m', index),
+        windGusts: _numberAt(hourly, 'wind_gusts_10m', index),
+        humidity: _intAt(hourly, 'relative_humidity_2m', index),
+        uvIndex: _numberAt(hourly, 'uv_index', index),
+        visibility: _numberAt(hourly, 'visibility', index),
+      );
+    });
+
+    final dailyTimes = _strings(daily, 'time');
+    final dailyItems = List<DailyWeather>.generate(dailyTimes.length, (index) {
+      return DailyWeather(
+        date: DateTime.parse(dailyTimes[index]),
+        weatherCode: _intAt(daily, 'weather_code', index),
+        high: _numberAt(daily, 'temperature_2m_max', index),
+        low: _numberAt(daily, 'temperature_2m_min', index),
+        precipitationProbability: _intAt(daily, 'precipitation_probability_max', index),
+        precipitation: _numberAt(daily, 'precipitation_sum', index),
+        windMaximum: _numberAt(daily, 'wind_speed_10m_max', index),
+        gustMaximum: _numberAt(daily, 'wind_gusts_10m_max', index),
+        sunrise: DateTime.parse(_strings(daily, 'sunrise')[index]),
+        sunset: DateTime.parse(_strings(daily, 'sunset')[index]),
+        daylightDuration: Duration(
+          seconds: _numberAt(daily, 'daylight_duration', index).round(),
+        ),
+        uvMaximum: _numberAt(daily, 'uv_index_max', index),
+      );
+    });
+
+    final rainChance = hourlyItems.isEmpty
+        ? 0
+        : hourlyItems
+            .take(24)
+            .map((item) => item.precipitationProbability)
+            .reduce((a, b) => a > b ? a : b);
+
+    return WeatherBundle(
+      cityId: cityId,
+      updatedAt: DateTime.now(),
+      current: CurrentWeather(
+        time: DateTime.parse(current['time'] as String),
+        temperature: _number(current['temperature_2m']),
+        feelsLike: _number(current['apparent_temperature']),
+        weatherCode: _integer(current['weather_code']),
+        isDay: _integer(current['is_day']) == 1,
+        precipitation: _number(current['precipitation']),
+        rainChance: rainChance,
+        windSpeed: _number(current['wind_speed_10m']),
+        windGusts: _number(current['wind_gusts_10m']),
+        windDirection: _integer(current['wind_direction_10m']),
+        humidity: _integer(current['relative_humidity_2m']),
+        visibility: _number(current['visibility']),
+        uvIndex: _number(current['uv_index']),
+        cloudCover: _integer(current['cloud_cover']),
+        surfacePressure: _number(current['surface_pressure']),
+      ),
+      hourly: hourlyItems,
+      daily: dailyItems,
+    );
+  }
+
+  static List<String> _strings(Map<String, dynamic> map, String key) =>
+      (map[key] as List<dynamic>).cast<String>();
+  static double _numberAt(Map<String, dynamic> map, String key, int index) =>
+      _number((map[key] as List<dynamic>)[index]);
+  static int _intAt(Map<String, dynamic> map, String key, int index) =>
+      _integer((map[key] as List<dynamic>)[index]);
+  static double _number(Object? value) => (value as num?)?.toDouble() ?? 0;
+  static int _integer(Object? value) => (value as num?)?.toInt() ?? 0;
 
   CityWeather _offline() {
     final now = DateTime.now();
