@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -77,12 +75,12 @@ class FamilyAtlas extends StatelessWidget {
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _AtlasPainter(
-                          land: context.pt.globeLand,
-                          ocean: context.pt.globeOcean,
+                          land: context.pt.globeAccent.withValues(alpha: .34),
+                          ocean: context.pt.globe,
                           line: context.pt.outline,
                           night: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.black.withValues(alpha: .18)
-                              : const Color(0xFF0D2130).withValues(alpha: .16),
+                              ? Colors.black.withValues(alpha: .22)
+                              : const Color(0xFF0D2130).withValues(alpha: .18),
                           utcHour: DateTime.now().toUtc().hour +
                               DateTime.now().toUtc().minute / 60,
                         ),
@@ -95,7 +93,8 @@ class FamilyAtlas extends StatelessWidget {
                         child: _CityMarker(
                           city: _city(marker.cityId),
                           viewer: viewer,
-                          snapshot: snapshots[_members(marker.cityId).first.name]!,
+                          snapshot:
+                              snapshots[_members(marker.cityId).first.name]!,
                           bundle: weather[marker.cityId],
                           timezone: timezone,
                           settings: settings,
@@ -157,9 +156,8 @@ class _CityMarker extends StatelessWidget {
     final clock = DateFormat(
       settings.clockFormat == ClockFormat.twentyFourHour ? 'HH:mm' : 'h:mm a',
     );
-    final markerColor = isDay
-        ? const Color(0xFFF3C86C)
-        : const Color(0xFF8BB8FF);
+    final markerColor =
+        isDay ? const Color(0xFFF3C86C) : const Color(0xFF8BB8FF);
 
     return Semantics(
       button: true,
@@ -298,7 +296,9 @@ class _AtlasPainter extends CustomPainter {
     final gradient = LinearGradient(
       colors: [night, Colors.transparent, Colors.transparent, night],
       stops: const [0, .22, .78, 1],
-    ).createShader(Rect.fromLTWH(center - nightWidth, 0, nightWidth * 2, size.height));
+    ).createShader(
+      Rect.fromLTWH(center - nightWidth, 0, nightWidth * 2, size.height),
+    );
     canvas.drawRect(rect, Paint()..shader = gradient);
 
     canvas.drawRect(
