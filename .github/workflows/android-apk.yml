@@ -66,6 +66,7 @@ jobs:
           flutter create --platforms=android --org com.pourtoujours --project-name pour_toujours .
           rm -f test/widget_test.dart
           python3 tool/prepare_android_v1.py
+          python3 tool/prepare_android_widgets_v2.py
 
       - name: Install Flutter packages
         run: flutter pub get
@@ -84,6 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           manifest=android/app/src/main/AndroidManifest.xml
+          kotlin=android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
           grep -F 'android:label="Pour Toujours"' "$manifest"
           grep -F 'android.permission.INTERNET' "$manifest"
           grep -F 'android.permission.POST_NOTIFICATIONS' "$manifest"
@@ -97,8 +99,19 @@ jobs:
           test -s android/app/src/main/res/layout/pt_widget_world.xml
           test -s android/app/src/main/res/layout/pt_widget_cities.xml
           test -s android/app/src/main/res/layout/pt_widget_city.xml
-          grep -F 'pourtoujours://$route' android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
-          grep -F 'Last refreshed in app' android/app/src/main/kotlin/com/pourtoujours/pour_toujours/PourToujoursWidgets.kt
+          test -s android/app/src/main/res/drawable/pt_world_map.xml
+          for city in karachi chiba dublin hattiesburg; do
+            test -s "android/app/src/main/res/drawable/pt_scene_${city}_day.xml"
+            test -s "android/app/src/main/res/drawable/pt_scene_${city}_night.xml"
+          done
+          grep -F 'pourtoujours:///city/$city' "$kotlin"
+          grep -F 'Last refreshed in app' "$kotlin"
+          grep -F 'openCity(context, city)' "$kotlin"
+          grep -F 'pt_${city}_is_day' "$kotlin"
+          grep -F 'View.GONE' "$kotlin"
+          grep -F 'ClipRRect' lib/features/today/ambient_sky.dart
+          grep -F 'clipBehavior: Clip.hardEdge' lib/features/today/ambient_sky.dart
+          grep -F '_controller.repeat()' lib/features/today/ambient_sky.dart
           ! grep -F 'ACCESS_FINE_LOCATION' "$manifest"
           ! grep -F 'ACCESS_COARSE_LOCATION' "$manifest"
           grep -F 'version: 1.0.0+10' pubspec.yaml
