@@ -49,11 +49,13 @@ class WeatherAlertService {
 
   final http.Client _client;
   static const _hattiesburg = (31.3271, -89.2903);
+  static Map<String, List<FamilyWeatherAlert>>? debugOfficialOverrides;
 
   Future<List<FamilyWeatherAlert>> fetchOfficialForCity(String cityId) async {
-    if (cityId != 'hattiesburg') {
-      return const [];
-    }
+    final debug = debugOfficialOverrides;
+    if (debug != null) return debug[cityId] ?? const [];
+    if (cityId != 'hattiesburg') return const [];
+
     final uri = Uri.https('api.weather.gov', '/alerts/active', {
       'point': '${_hattiesburg.$1},${_hattiesburg.$2}',
       'status': 'actual',
@@ -62,11 +64,9 @@ class WeatherAlertService {
     try {
       final response = await _client.get(uri, headers: const {
         'Accept': 'application/geo+json',
-        'User-Agent': 'PourToujours/0.6 (family-weather-app)',
+        'User-Agent': 'PourToujours/0.8 (family-weather-app)',
       }).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) {
-        return const [];
-      }
+      if (response.statusCode != 200) return const [];
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final features = body['features'] as List<dynamic>? ?? const [];
       return features.map((raw) {
@@ -78,10 +78,7 @@ class WeatherAlertService {
           cityId: cityId,
           event: event,
           headline: (properties['headline'] as String?) ?? event,
-          instruction: _instruction(
-            event,
-            properties['instruction'] as String?,
-          ),
+          instruction: _instruction(event, properties['instruction'] as String?),
           source: WeatherAlertSource.official,
           severity: _severity(properties['severity'] as String?),
           effective: _date(properties['effective']),
@@ -98,6 +95,7 @@ class WeatherAlertService {
   }
 
   List<FamilyWeatherAlert> derive(String cityId, WeatherBundle bundle) {
+    if (bundle.daily.isEmpty) return const [];
     final current = bundle.current;
     final today = bundle.daily.first;
     final alerts = <FamilyWeatherAlert>[];
@@ -147,8 +145,7 @@ class WeatherAlertService {
         WeatherAlertSeverity.moderate,
       );
     }
-    if (today.precipitation >= 35 ||
-        today.precipitationProbability >= 85) {
+    if (today.precipitation >= 35 || today.precipitationProbability >= 85) {
       add(
         'Heavy rain',
         'Heavy rain may disrupt travel',
@@ -210,9 +207,7 @@ class WeatherAlertService {
       value is String ? DateTime.tryParse(value) : null;
 
   static String _instruction(String event, String? official) {
-    if (official != null && official.trim().isNotEmpty) {
-      return official.trim();
-    }
+    if (official != null && official.trim().isNotEmpty) return official.trim();
     final lower = event.toLowerCase();
     if (lower.contains('tornado warning')) {
       return 'Seek shelter now in a sturdy interior room on the lowest floor, away from windows.';
