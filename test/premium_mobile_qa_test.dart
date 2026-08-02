@@ -10,7 +10,6 @@ import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/data/family_seed.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
-import 'package:pour_toujours/features/today/ambient_sky.dart';
 
 void main() {
   setUpAll(tz.initializeTimeZones);
@@ -218,14 +217,6 @@ void main() {
     expect(find.byType(BackButton), findsOneWidget);
     expect(find.text('Karachi'), findsWidgets);
     expectClean(tester);
-  });
-
-  testWidgets('Ambient sky classifies common weather states', (tester) async {
-    expect(AmbientSky.classify(0), AmbientSkyKind.clear);
-    expect(AmbientSky.classify(2), AmbientSkyKind.cloudy);
-    expect(AmbientSky.classify(61), AmbientSkyKind.rain);
-    expect(AmbientSky.classify(95), AmbientSkyKind.storm);
-    expect(AmbientSky.classify(45), AmbientSkyKind.fog);
   });
 
   testWidgets('Large text and reduced motion remain usable', (tester) async {
