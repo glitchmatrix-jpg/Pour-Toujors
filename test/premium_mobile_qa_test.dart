@@ -220,7 +220,7 @@ void main() {
     expect(find.text('Karachi'), findsWidgets);
     await tester.tap(find.text('Karachi').first);
     await tester.pumpAndSettle();
-    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
     expect(find.text('Karachi'), findsWidgets);
     expectClean(tester);
   });
