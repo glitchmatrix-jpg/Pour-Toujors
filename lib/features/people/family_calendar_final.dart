@@ -8,11 +8,7 @@ import '../../data/family_seed.dart';
 import 'people_calendar_experience.dart';
 
 class FamilyCalendarFinalScreen extends StatefulWidget {
-  const FamilyCalendarFinalScreen({
-    super.key,
-    required this.viewerName,
-  });
-
+  const FamilyCalendarFinalScreen({super.key, required this.viewerName});
   final String viewerName;
 
   @override
@@ -33,13 +29,12 @@ class _FamilyCalendarFinalScreenState
   late Future<List<NationalHoliday>> holidays = _loadHolidays();
 
   Future<List<NationalHoliday>> _loadHolidays() async {
-    final values = await Future.wait([
+    final groups = await Future.wait([
       for (final city in cities)
         HolidayService().fetchUpcoming(city.id, limit: 12),
     ]);
-    final flat = values.expand((items) => items).toList()
+    return groups.expand((group) => group).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
-    return flat;
   }
 
   @override
@@ -58,10 +53,10 @@ class _FamilyCalendarFinalScreenState
       body: FutureBuilder<List<FamilyEvent>>(
         future: events,
         builder: (context, eventSnapshot) {
-          final saved = eventSnapshot.data ?? const <FamilyEvent>[];
           return FutureBuilder<List<NationalHoliday>>(
             future: holidays,
             builder: (context, holidaySnapshot) {
+              final saved = eventSnapshot.data ?? const <FamilyEvent>[];
               final holidayValues =
                   holidaySnapshot.data ?? const <NationalHoliday>[];
               return ListView(
@@ -76,7 +71,7 @@ class _FamilyCalendarFinalScreenState
                       month = DateTime(month.year, month.month + 1);
                     }),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -98,9 +93,9 @@ class _FamilyCalendarFinalScreenState
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const _WeekdayHeader(),
+                  const _Weekdays(),
                   const SizedBox(height: 7),
-                  _MonthGrid(
+                  _CalendarGrid(
                     month: month,
                     selected: selected,
                     events: saved,
@@ -109,7 +104,7 @@ class _FamilyCalendarFinalScreenState
                     onSelected: (date) => setState(() => selected = date),
                   ),
                   const SizedBox(height: 18),
-                  _SelectedDayCard(
+                  _SelectedDay(
                     date: selected,
                     events: saved,
                     holidays: holidayValues,
@@ -132,7 +127,7 @@ class _FamilyCalendarFinalScreenState
                     ],
                   ),
                   const SizedBox(height: 10),
-                  _UpcomingList(events: saved, holidays: holidayValues),
+                  _Upcoming(events: saved, holidays: holidayValues),
                 ],
               );
             },
@@ -149,8 +144,7 @@ class _FamilyCalendarFinalScreenState
     );
     if (created == null) return;
     await FamilyEventStore().add(created);
-    if (!mounted) return;
-    setState(() => events = FamilyEventStore().load());
+    if (mounted) setState(() => events = FamilyEventStore().load());
   }
 }
 
@@ -160,7 +154,6 @@ class _MonthHeader extends StatelessWidget {
     required this.previous,
     required this.next,
   });
-
   final DateTime month;
   final VoidCallback previous;
   final VoidCallback next;
@@ -168,7 +161,7 @@ class _MonthHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: context.pt.card,
         borderRadius: BorderRadius.circular(22),
@@ -176,11 +169,7 @@ class _MonthHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Previous month',
-            onPressed: previous,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
+          IconButton(onPressed: previous, icon: const Icon(Icons.chevron_left)),
           Expanded(
             child: Text(
               DateFormat('MMMM yyyy').format(month),
@@ -191,20 +180,15 @@ class _MonthHeader extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
-          IconButton(
-            tooltip: 'Next month',
-            onPressed: next,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
+          IconButton(onPressed: next, icon: const Icon(Icons.chevron_right)),
         ],
       ),
     );
   }
 }
 
-class _WeekdayHeader extends StatelessWidget {
-  const _WeekdayHeader();
-
+class _Weekdays extends StatelessWidget {
+  const _Weekdays();
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -217,7 +201,7 @@ class _WeekdayHeader extends StatelessWidget {
               style: TextStyle(
                 color: context.pt.secondaryText,
                 fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -226,8 +210,8 @@ class _WeekdayHeader extends StatelessWidget {
   }
 }
 
-class _MonthGrid extends StatelessWidget {
-  const _MonthGrid({
+class _CalendarGrid extends StatelessWidget {
+  const _CalendarGrid({
     required this.month,
     required this.selected,
     required this.events,
@@ -235,7 +219,6 @@ class _MonthGrid extends StatelessWidget {
     required this.filter,
     required this.onSelected,
   });
-
   final DateTime month;
   final DateTime selected;
   final List<FamilyEvent> events;
@@ -248,79 +231,59 @@ class _MonthGrid extends StatelessWidget {
     final days = DateUtils.getDaysInMonth(month.year, month.month);
     final leading = DateTime(month.year, month.month).weekday - 1;
     final total = ((leading + days + 6) ~/ 7) * 7;
+    final primary = Theme.of(context).colorScheme.primary;
     return GridView.builder(
       key: const ValueKey('polished-month-grid'),
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
-        childAspectRatio: .82,
+        childAspectRatio: .84,
         crossAxisSpacing: 5,
         mainAxisSpacing: 5,
       ),
       itemCount: total,
       itemBuilder: (context, index) {
         final number = index - leading + 1;
-        if (number < 1 || number > days) {
-          return const SizedBox.shrink();
-        }
+        if (number < 1 || number > days) return const SizedBox.shrink();
         final date = DateTime(month.year, month.month, number);
-        final markers = _markers(date, events, holidays, filter);
-        final isSelected = DateUtils.isSameDay(date, selected);
-        final isToday = DateUtils.isSameDay(date, DateTime.now());
-        return Semantics(
-          button: true,
-          selected: isSelected,
-          label:
-              '${DateFormat('EEEE, d MMMM').format(date)}, ${markers.length} family calendar items',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(13),
-            onTap: () => onSelected(date),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 170),
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? context.pt.accent.withValues(alpha: .16)
-                    : context.pt.card,
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(
-                  color: isSelected
-                      ? context.pt.accent
-                      : isToday
-                          ? context.pt.birthday
-                          : context.pt.outline,
-                  width: isSelected ? 1.6 : 1,
-                ),
+        final items = _itemsFor(date, events, holidays, filter);
+        final chosen = DateUtils.isSameDay(date, selected);
+        return InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: () => onSelected(date),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: chosen ? primary.withValues(alpha: .15) : context.pt.card,
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(
+                color: chosen ? primary : context.pt.outline,
+                width: chosen ? 1.6 : 1,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$number',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: isSelected ? context.pt.accent : null,
-                    ),
-                  ),
-                  const Spacer(),
-                  Wrap(
-                    spacing: 3,
-                    runSpacing: 3,
-                    children: [
-                      for (final marker in markers.take(4))
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: marker.color(context),
-                            shape: BoxShape.circle,
-                          ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$number', style: const TextStyle(fontWeight: FontWeight.w900)),
+                const Spacer(),
+                Wrap(
+                  spacing: 3,
+                  runSpacing: 3,
+                  children: [
+                    for (final item in items.take(4))
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: item.color(context),
+                          shape: BoxShape.circle,
                         ),
-                    ],
-                  ),
-                ],
-              ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         );
@@ -329,14 +292,13 @@ class _MonthGrid extends StatelessWidget {
   }
 }
 
-class _SelectedDayCard extends StatelessWidget {
-  const _SelectedDayCard({
+class _SelectedDay extends StatelessWidget {
+  const _SelectedDay({
     required this.date,
     required this.events,
     required this.holidays,
     required this.onAdd,
   });
-
   final DateTime date;
   final List<FamilyEvent> events;
   final List<NationalHoliday> holidays;
@@ -344,7 +306,7 @@ class _SelectedDayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _dayItems(date, events, holidays);
+    final items = _itemsFor(date, events, holidays, 'All');
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -363,11 +325,7 @@ class _SelectedDayCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
-              IconButton(
-                tooltip: 'Add event on this day',
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded),
-              ),
+              IconButton(onPressed: onAdd, icon: const Icon(Icons.add_rounded)),
             ],
           ),
           if (items.isEmpty)
@@ -377,41 +335,14 @@ class _SelectedDayCard extends StatelessWidget {
             )
           else
             for (final item in items)
-              Padding(
-                padding: const EdgeInsets.only(top: 9),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 9,
-                      height: 9,
-                      margin: const EdgeInsets.only(top: 5),
-                      decoration: BoxDecoration(
-                        color: item.color(context),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.title,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800)),
-                          if (item.subtitle.isNotEmpty)
-                            Text(
-                              item.subtitle,
-                              style: TextStyle(
-                                color: context.pt.secondaryText,
-                                fontSize: 11,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: item.color(context).withValues(alpha: .14),
+                  child: Icon(item.icon, color: item.color(context), size: 18),
                 ),
+                title: Text(item.title),
+                subtitle: Text(item.subtitle),
               ),
         ],
       ),
@@ -419,9 +350,8 @@ class _SelectedDayCard extends StatelessWidget {
   }
 }
 
-class _UpcomingList extends StatelessWidget {
-  const _UpcomingList({required this.events, required this.holidays});
-
+class _Upcoming extends StatelessWidget {
+  const _Upcoming({required this.events, required this.holidays});
   final List<FamilyEvent> events;
   final List<NationalHoliday> holidays;
 
@@ -435,156 +365,114 @@ class _UpcomingList extends StatelessWidget {
         date = DateTime(now.year + 1, birthday.month, birthday.day);
       }
       items.add(_CalendarItem(
-        date: date,
-        title: birthday.name,
-        subtitle: 'Birthday · ${DateFormat('d MMMM').format(date)}',
-        type: _CalendarItemType.birthday,
+        date,
+        birthday.name,
+        'Birthday · ${DateFormat('d MMMM').format(date)}',
+        _ItemType.birthday,
       ));
     }
     for (final holiday in holidays.where((item) => !item.date.isBefore(now))) {
       items.add(_CalendarItem(
-        date: holiday.date,
-        title: holiday.name,
-        subtitle: '${holiday.countryCode} holiday · ${DateFormat('d MMMM').format(holiday.date)}',
-        type: _CalendarItemType.holiday,
+        holiday.date,
+        holiday.name,
+        '${holiday.countryCode} holiday · ${DateFormat('d MMMM').format(holiday.date)}',
+        _ItemType.holiday,
       ));
     }
     for (final event in events.where((item) => item.utcStart.isAfter(now.toUtc()))) {
       items.add(_CalendarItem(
-        date: event.utcStart.toLocal(),
-        title: event.title,
-        subtitle: DateFormat('d MMM · h:mm a').format(event.utcStart.toLocal()),
-        type: _CalendarItemType.event,
+        event.utcStart.toLocal(),
+        event.title,
+        DateFormat('d MMM · h:mm a').format(event.utcStart.toLocal()),
+        _ItemType.event,
       ));
     }
     items.sort((a, b) => a.date.compareTo(b.date));
-    if (items.isEmpty) {
-      return Text('No upcoming family moments.',
-          style: TextStyle(color: context.pt.secondaryText));
-    }
     return Column(
       children: [
-        for (var index = 0; index < mathMin(items.length, 12); index++) ...[
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.pt.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: context.pt.outline),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: items[index].color(context).withValues(alpha: .16),
-                  child: Icon(items[index].icon,
-                      color: items[index].color(context), size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(items[index].title,
-                          style: const TextStyle(fontWeight: FontWeight.w900)),
-                      Text(items[index].subtitle,
-                          style: TextStyle(
-                              color: context.pt.secondaryText, fontSize: 11)),
-                    ],
-                  ),
-                ),
-              ],
+        for (var index = 0; index < items.length && index < 12; index++) ...[
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: items[index].color(context).withValues(alpha: .14),
+                child: Icon(items[index].icon, color: items[index].color(context)),
+              ),
+              title: Text(items[index].title),
+              subtitle: Text(items[index].subtitle),
             ),
           ),
-          if (index != mathMin(items.length, 12) - 1)
-            const SizedBox(height: 8),
+          const SizedBox(height: 8),
         ],
       ],
     );
   }
 }
 
-enum _CalendarItemType { birthday, holiday, event }
+enum _ItemType { birthday, holiday, event }
 
 class _CalendarItem {
-  const _CalendarItem({
-    required this.date,
-    required this.title,
-    required this.subtitle,
-    required this.type,
-  });
-
+  const _CalendarItem(this.date, this.title, this.subtitle, this.type);
   final DateTime date;
   final String title;
   final String subtitle;
-  final _CalendarItemType type;
+  final _ItemType type;
 
   IconData get icon => switch (type) {
-        _CalendarItemType.birthday => Icons.cake_outlined,
-        _CalendarItemType.holiday => Icons.flag_outlined,
-        _CalendarItemType.event => Icons.event_outlined,
+        _ItemType.birthday => Icons.cake_outlined,
+        _ItemType.holiday => Icons.flag_outlined,
+        _ItemType.event => Icons.event_outlined,
       };
 
   Color color(BuildContext context) => switch (type) {
-        _CalendarItemType.birthday => context.pt.birthday,
-        _CalendarItemType.holiday => context.pt.holiday,
-        _CalendarItemType.event => context.pt.accent,
+        _ItemType.birthday => context.pt.birthday,
+        _ItemType.holiday => context.pt.holiday,
+        _ItemType.event => Theme.of(context).colorScheme.primary,
       };
 }
 
-List<_CalendarItem> _markers(
+List<_CalendarItem> _itemsFor(
   DateTime date,
   List<FamilyEvent> events,
   List<NationalHoliday> holidays,
   String filter,
 ) {
-  return _dayItems(date, events, holidays).where((item) {
-    return switch (filter) {
-      'Birthdays' => item.type == _CalendarItemType.birthday,
-      'Holidays' => item.type == _CalendarItemType.holiday,
-      'Family events' => item.type == _CalendarItemType.event,
-      _ => true,
-    };
-  }).toList();
-}
-
-List<_CalendarItem> _dayItems(
-  DateTime date,
-  List<FamilyEvent> events,
-  List<NationalHoliday> holidays,
-) {
   final values = <_CalendarItem>[];
-  for (final birthday in familyBirthdays) {
-    if (birthday.month == date.month && birthday.day == date.day) {
-      values.add(_CalendarItem(
-        date: date,
-        title: '${birthday.name}’s birthday',
-        subtitle: 'Family birthday',
-        type: _CalendarItemType.birthday,
-      ));
+  if (filter == 'All' || filter == 'Birthdays') {
+    for (final birthday in familyBirthdays) {
+      if (birthday.month == date.month && birthday.day == date.day) {
+        values.add(_CalendarItem(
+          date,
+          '${birthday.name}’s birthday',
+          'Family birthday',
+          _ItemType.birthday,
+        ));
+      }
     }
   }
-  for (final holiday in holidays) {
-    if (DateUtils.isSameDay(holiday.date, date)) {
-      values.add(_CalendarItem(
-        date: date,
-        title: holiday.name,
-        subtitle: '${holiday.countryCode} national holiday',
-        type: _CalendarItemType.holiday,
-      ));
+  if (filter == 'All' || filter == 'Holidays') {
+    for (final holiday in holidays) {
+      if (DateUtils.isSameDay(holiday.date, date)) {
+        values.add(_CalendarItem(
+          date,
+          holiday.name,
+          '${holiday.countryCode} national holiday',
+          _ItemType.holiday,
+        ));
+      }
     }
   }
-  for (final event in events) {
-    final local = event.utcStart.toLocal();
-    if (DateUtils.isSameDay(local, date)) {
-      values.add(_CalendarItem(
-        date: date,
-        title: event.title,
-        subtitle: DateFormat('h:mm a').format(local),
-        type: _CalendarItemType.event,
-      ));
+  if (filter == 'All' || filter == 'Family events') {
+    for (final event in events) {
+      final local = event.utcStart.toLocal();
+      if (DateUtils.isSameDay(local, date)) {
+        values.add(_CalendarItem(
+          date,
+          event.title,
+          DateFormat('h:mm a').format(local),
+          _ItemType.event,
+        ));
+      }
     }
   }
   return values;
 }
-
-int mathMin(int first, int second) => first < second ? first : second;
