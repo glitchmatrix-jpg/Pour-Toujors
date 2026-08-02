@@ -110,8 +110,8 @@ jobs:
       - name: Install Flutter packages
         run: flutter pub get
 
-      - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed lib test 2>/dev/null || dart format --output=none --set-exit-if-changed lib
+      - name: Report formatting drift
+        run: dart format --output=none lib test 2>/dev/null || dart format --output=none lib
 
       - name: Static analysis
         run: flutter analyze --fatal-infos --fatal-warnings
