@@ -26,3 +26,6 @@ flutter:
   assets:
     - assets/brand/
     - assets/cities/
+    - assets/city_photos/
+    - assets/weather_icons/
+    - assets/licenses/
