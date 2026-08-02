@@ -33,11 +33,18 @@ void main() {
       familyGraph.relationship(viewer: 'Shahid', person: 'Affan'),
       'Nephew by marriage',
     );
+    expect(
+      familyGraph.relationship(viewer: 'Ami', person: 'Sarwat'),
+      'Daughter-in-law',
+    );
   });
 
   test('unrecorded relationships remain explicit and conservative', () {
     expect(
-      familyGraph.relationship(viewer: 'Ami', person: 'Sarwat'),
+      familyGraph.relationship(
+        viewer: 'Hasan',
+        person: 'Unrecorded relative',
+      ),
       'Relationship not mapped',
     );
     expect(familyGraph.missingLinks, isNotEmpty);
