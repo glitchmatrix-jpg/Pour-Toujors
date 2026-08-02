@@ -6,7 +6,6 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:pour_toujours/app/theme/pour_toujours_theme.dart';
 import 'package:pour_toujours/core/alerts/weather_alert_service.dart';
 import 'package:pour_toujours/core/settings/app_settings.dart';
-import 'package:pour_toujours/core/time/timezone_intelligence.dart';
 import 'package:pour_toujours/core/weather/weather_models.dart';
 import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/data/family_seed.dart';
