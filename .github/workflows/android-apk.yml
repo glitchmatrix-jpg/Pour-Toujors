@@ -1,0 +1,174 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: APK build mode
+        required: true
+        default: both
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+  push:
+    branches:
+      - agent/initial-product-foundation
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "android/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "tools/fetch_premium_assets.ps1"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "android/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "tools/fetch_premium_assets.ps1"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_CHANNEL: stable
+  JAVA_VERSION: "17"
+
+jobs:
+  validate-and-build:
+    name: Validate and build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Report toolchain
+        run: |
+          flutter --version
+          dart --version
+          java -version
+
+      - name: Fetch licensed visual assets
+        shell: pwsh
+        run: ./tools/fetch_premium_assets.ps1
+
+      - name: Verify required assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s assets/city_photos/karachi.jpg
+          test -s assets/city_photos/chiba.jpg
+          test -s assets/city_photos/dublin.jpg
+          test -s assets/city_photos/hattiesburg.jpg
+          test -s assets/weather_icons/clear-day.svg
+          test -s assets/weather_icons/clear-night.svg
+          echo "Required runtime assets are present."
+
+      - name: Generate Android platform when absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
+            flutter create \
+              --platforms=android \
+              --org com.pourtoujours \
+              --project-name pour_toujours \
+              .
+          fi
+
+      - name: Install Flutter packages
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test 2>/dev/null || dart format --output=none --set-exit-if-changed lib
+
+      - name: Static analysis
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Run tests when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find test -type f -name '*_test.dart' -print -quit 2>/dev/null | grep -q .; then
+            flutter test --reporter expanded
+          else
+            echo "No Flutter tests are present yet; skipping test execution."
+          fi
+
+      - name: Build debug APK
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
+        run: flutter build apk --debug --build-name=0.2.0 --build-number=${{ github.run_number }}
+
+      - name: Build release APK for QA
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
+        run: flutter build apk --release --build-name=0.2.0 --build-number=${{ github.run_number }}
+
+      - name: Collect APKs and checksums
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
+          if compgen -G 'dist/*.apk' > /dev/null; then
+            (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+            ls -lh dist
+            cat dist/SHA256SUMS.txt
+          else
+            echo "No APK was produced. Earlier validation or build steps failed."
+          fi
+
+      - name: Upload debug APK
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pour-toujours-debug-${{ github.run_number }}
+          path: |
+            dist/app-debug.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload release QA APK
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pour-toujours-release-qa-${{ github.run_number }}
+          path: |
+            dist/app-release.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
