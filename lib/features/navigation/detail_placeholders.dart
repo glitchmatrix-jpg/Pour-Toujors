@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/alerts/weather_alert_service.dart';
 import '../city/city_experience.dart';
+import '../people/people_calendar_experience.dart';
 
 abstract final class PourToujoursRouteNames {
   static const city = '/city';
@@ -10,6 +11,8 @@ abstract final class PourToujoursRouteNames {
   static const weatherCompare = '/weather/compare';
   static const person = '/person';
   static const overlapPlanner = '/planner';
+  static const calendar = '/calendar';
+  static const eventEditor = '/event';
   static const holiday = '/holiday';
   static const birthday = '/birthday';
   static const alert = '/alert';
@@ -93,19 +96,43 @@ abstract final class PourToujoursRoutes {
         viewerName: args.viewerName ?? viewerName,
       );
     }
-    if (name == PourToujoursRouteNames.alert) {
-      if (args.payload is FamilyWeatherAlert) {
-        return AlertDetailScreen(
-          alert: args.payload! as FamilyWeatherAlert,
-        );
-      }
-      return _FoundationDetailPage(args: args);
+    if (name == PourToujoursRouteNames.alert &&
+        args.payload is FamilyWeatherAlert) {
+      return AlertDetailScreen(alert: args.payload! as FamilyWeatherAlert);
+    }
+    if (name == PourToujoursRouteNames.person) {
+      final payload = args.payload is PersonRoutePayload
+          ? args.payload! as PersonRoutePayload
+          : PersonRoutePayload(
+              personName: args.payload is String
+                  ? args.payload! as String
+                  : args.title,
+              viewerName: args.viewerName ?? viewerName,
+            );
+      return PersonDetailScreen(payload: payload);
+    }
+    if (name == PourToujoursRouteNames.overlapPlanner) {
+      return ContactPlannerScreen(viewerName: args.viewerName ?? viewerName);
+    }
+    if (name == PourToujoursRouteNames.calendar) {
+      return FamilyCalendarScreen(viewerName: args.viewerName ?? viewerName);
+    }
+    if (name == PourToujoursRouteNames.eventEditor) {
+      return const EventEditorScreen();
+    }
+    if (name == PourToujoursRouteNames.birthday) {
+      final payload = args.payload is BirthdayRoutePayload
+          ? args.payload! as BirthdayRoutePayload
+          : BirthdayRoutePayload(
+              personName: args.payload is String
+                  ? args.payload! as String
+                  : args.title,
+              viewerName: args.viewerName ?? viewerName,
+            );
+      return BirthdayDetailScreen(payload: payload);
     }
     const placeholders = {
-      PourToujoursRouteNames.person,
-      PourToujoursRouteNames.overlapPlanner,
       PourToujoursRouteNames.holiday,
-      PourToujoursRouteNames.birthday,
       PourToujoursRouteNames.themePreview,
     };
     return placeholders.contains(name) ? _FoundationDetailPage(args: args) : null;
@@ -130,21 +157,13 @@ class _FoundationDetailPage extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 18),
-            Text(
-              args.title,
-              style: Theme.of(context).textTheme.displaySmall,
-            ),
+            Text(args.title, style: Theme.of(context).textTheme.displaySmall),
             if (args.subtitle != null) ...[
               const SizedBox(height: 10),
-              Text(
-                args.subtitle!,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+              Text(args.subtitle!, style: Theme.of(context).textTheme.bodyLarge),
             ],
             const SizedBox(height: 24),
-            const Text(
-              'This route is active and retains its typed payload for the next dedicated experience.',
-            ),
+            const Text('This route is active and retains its typed payload for the next dedicated experience.'),
           ],
         ),
       ),
