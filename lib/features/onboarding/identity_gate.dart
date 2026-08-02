@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/identity/identity_store.dart';
-import '../home/premium_home_screen_v2.dart';
+import '../home/premium_home_screen_v3.dart';
 import 'identity_setup_screen.dart';
 
 class IdentityGate extends StatefulWidget {
@@ -46,12 +46,11 @@ class _IdentityGateState extends State<IdentityGate> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF5F6F3),
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
       );
     }
     if (selected == null) return IdentitySetupScreen(onSelected: _select);
-    return PremiumHomeScreenV2(viewerName: selected!, onSwitchProfile: _switchProfile);
+    return PremiumHomeScreenV3(viewerName: selected!, onSwitchProfile: _switchProfile);
   }
 }
