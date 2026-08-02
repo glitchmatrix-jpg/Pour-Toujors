@@ -134,11 +134,12 @@ void main() {
     Size(768, 1024),
     Size(1440, 900),
   ]) {
-    testWidgets('Living Today is clean at ${size.width}x${size.height}', (
+    testWidgets('Final Today is clean at ${size.width}x${size.height}', (
       tester,
     ) async {
       await pumpHome(tester, size);
-      expect(find.text('Today'), findsWidgets);
+      expect(find.text('Family atlas'), findsOneWidget);
+      expect(find.text('Family contact planner'), findsNothing);
       expectClean(tester);
     });
   }
@@ -167,34 +168,35 @@ void main() {
     );
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();
-
     expect(find.text('Evergreen'), findsOneWidget);
-    expect(find.text('Cherry Cola'), findsOneWidget);
     await tester.tap(find.text('Cherry Cola'));
     await tester.pump();
     expect(controller.value.theme, PtThemeCollection.cherryCola);
-
     final switchTile = find.widgetWithText(SwitchListTile, 'Reduce motion');
     await tester.ensureVisible(switchTile);
     await tester.pumpAndSettle();
     await tester.tap(switchTile);
     await tester.pump();
-
     expect(controller.value.reducedMotion, isTrue);
     expectClean(tester);
   });
 
-  testWidgets('People relationships remain viewer-relative', (tester) async {
+  testWidgets('People relationships remain viewer-relative without planner', (
+    tester,
+  ) async {
     await pumpHome(tester, const Size(390, 844), viewer: 'Talat');
     await tester.tap(find.text('People').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('Son'), findsWidgets);
     expect(find.textContaining('Daughter'), findsOneWidget);
-    expect(find.text('Plan a call'), findsOneWidget);
+    expect(find.text('Plan a call'), findsNothing);
+    expect(find.text('Family contact planner'), findsNothing);
     expectClean(tester);
   });
 
-  testWidgets('Calendar renders monthly family experience', (tester) async {
+  testWidgets('Calendar renders polished monthly family experience', (
+    tester,
+  ) async {
     await pumpHome(tester, const Size(390, 844));
     await tester.tap(find.text('Calendar').last);
     await tester.pumpAndSettle();
@@ -202,20 +204,17 @@ void main() {
     expect(find.text('Holidays'), findsOneWidget);
     expect(find.text('Family events'), findsOneWidget);
     expect(find.text('Upcoming'), findsOneWidget);
-    expect(find.text('Event'), findsOneWidget);
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byKey(const ValueKey('polished-month-grid')), findsOneWidget);
     expectClean(tester);
   });
 
-  testWidgets('City nodes and shared-time ribbon are interactive', (
-    tester,
-  ) async {
+  testWidgets('Atlas city marker opens final city experience', (tester) async {
     await pumpHome(tester, const Size(390, 844));
     expect(find.text('Karachi'), findsWidgets);
     await tester.tap(find.text('Karachi').first);
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-    expect(find.text('Karachi'), findsWidgets);
+    expect(find.text('The city’s light'), findsOneWidget);
     expectClean(tester);
   });
 
@@ -226,7 +225,7 @@ void main() {
       settings: const AppSettings(reducedMotion: true),
       textScale: 1.4,
     );
-    expect(find.text('Today'), findsWidgets);
+    expect(find.text('Family atlas'), findsOneWidget);
     expectClean(tester);
   });
 }
