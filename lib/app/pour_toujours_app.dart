@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../features/today/today_screen_v2.dart';
+import '../features/onboarding/identity_gate.dart';
 import 'theme/pour_toujours_theme.dart';
 
 class PourToujoursApp extends StatelessWidget {
@@ -12,7 +12,7 @@ class PourToujoursApp extends StatelessWidget {
       title: 'Pour Toujours',
       debugShowCheckedModeBanner: false,
       theme: PourToujoursTheme.light,
-      home: const TodayScreenV2(),
+      home: const IdentityGate(),
     );
   }
 }
