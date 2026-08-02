@@ -11,6 +11,7 @@ import 'package:pour_toujours/core/weather/weather_service.dart';
 import 'package:pour_toujours/data/family_seed.dart';
 import 'package:pour_toujours/features/home/premium_home_screen_v3.dart';
 import 'package:pour_toujours/features/navigation/detail_placeholders.dart';
+import 'package:pour_toujours/features/today/family_atlas.dart';
 
 void main() {
   setUpAll(tz.initializeTimeZones);
@@ -138,7 +139,7 @@ void main() {
       tester,
     ) async {
       await pumpHome(tester, size);
-      expect(find.text('Family atlas'), findsOneWidget);
+      expect(find.byType(FamilyAtlas), findsOneWidget);
       expect(find.text('Family contact planner'), findsNothing);
       expectClean(tester);
     });
@@ -203,8 +204,8 @@ void main() {
     expect(find.text('Birthdays'), findsOneWidget);
     expect(find.text('Holidays'), findsOneWidget);
     expect(find.text('Family events'), findsOneWidget);
-    expect(find.text('Upcoming'), findsOneWidget);
     expect(find.byKey(const ValueKey('polished-month-grid')), findsOneWidget);
+    expect(find.byTooltip('Add event'), findsOneWidget);
     expectClean(tester);
   });
 
@@ -225,7 +226,7 @@ void main() {
       settings: const AppSettings(reducedMotion: true),
       textScale: 1.4,
     );
-    expect(find.text('Family atlas'), findsOneWidget);
+    expect(find.byType(FamilyAtlas), findsOneWidget);
     expectClean(tester);
   });
 }
