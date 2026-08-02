@@ -19,18 +19,13 @@ enum AmbientSkyKind {
   sunset,
 }
 
-AmbientSkyKind ambientSkyKindFor(
-  CurrentWeather weather,
-  DailyWeather? day,
-) {
+AmbientSkyKind ambientSkyKindFor(CurrentWeather weather, DailyWeather? day) {
   final now = weather.time;
   if (day != null) {
-    final sunriseDelta = now.difference(day.sunrise).abs();
-    final sunsetDelta = now.difference(day.sunset).abs();
-    if (sunriseDelta <= const Duration(minutes: 50)) {
+    if (now.difference(day.sunrise).abs() <= const Duration(minutes: 50)) {
       return AmbientSkyKind.sunrise;
     }
-    if (sunsetDelta <= const Duration(minutes: 50)) {
+    if (now.difference(day.sunset).abs() <= const Duration(minutes: 50)) {
       return AmbientSkyKind.sunset;
     }
   }
@@ -41,12 +36,7 @@ AmbientSkyKind ambientSkyKindFor(
     return AmbientSkyKind.rain;
   }
   if (code == 45 || code == 48) return AmbientSkyKind.fog;
-  if (code >= 2 && code <= 3) {
-    return weather.isDay
-        ? AmbientSkyKind.partlyCloudyDay
-        : AmbientSkyKind.partlyCloudyNight;
-  }
-  if (code == 1) {
+  if (code >= 1 && code <= 3) {
     return weather.isDay
         ? AmbientSkyKind.partlyCloudyDay
         : AmbientSkyKind.partlyCloudyNight;
@@ -79,14 +69,13 @@ class AmbientSky extends StatefulWidget {
 class _AmbientSkyState extends State<AmbientSky>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  bool _motionStarted = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 28),
       value: .35,
     );
   }
@@ -94,19 +83,12 @@ class _AmbientSkyState extends State<AmbientSky>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncMotion();
-  }
-
-  void _syncMotion() {
     final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (reduced) {
       _controller.stop();
       _controller.value = .35;
-      return;
-    }
-    if (!_motionStarted) {
-      _motionStarted = true;
-      _controller.forward(from: 0);
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
     }
   }
 
@@ -127,18 +109,26 @@ class _AmbientSkyState extends State<AmbientSky>
       label: widget.semanticLabel ?? _description(kind),
       child: ClipRRect(
         borderRadius: widget.borderRadius,
+        clipBehavior: Clip.antiAlias,
         child: SizedBox(
           height: resolvedHeight,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) => CustomPaint(
-              painter: _AmbientSkyPainter(
-                kind: kind,
-                progress: _controller.value,
-                theme: context.pt,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            fit: StackFit.expand,
+            children: [
+              AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) => CustomPaint(
+                  key: const ValueKey('ambient-sky-motion'),
+                  painter: _AmbientSkyPainter(
+                    kind: kind,
+                    progress: _controller.value,
+                    theme: context.pt,
+                  ),
+                ),
               ),
-              child: widget.child,
-            ),
+              widget.child,
+            ],
           ),
         ),
       ),
@@ -148,13 +138,13 @@ class _AmbientSkyState extends State<AmbientSky>
   String _description(AmbientSkyKind kind) => switch (kind) {
         AmbientSkyKind.clearDay => 'Clear daylight sky',
         AmbientSkyKind.clearNight => 'Clear night sky',
-        AmbientSkyKind.partlyCloudyDay => 'Partly cloudy daylight sky',
-        AmbientSkyKind.partlyCloudyNight => 'Partly cloudy night sky',
+        AmbientSkyKind.partlyCloudyDay => 'Moving clouds in daylight',
+        AmbientSkyKind.partlyCloudyNight => 'Moving clouds at night',
         AmbientSkyKind.overcast => 'Overcast sky',
-        AmbientSkyKind.rain => 'Rainy sky',
-        AmbientSkyKind.thunderstorm => 'Thunderstorm sky',
-        AmbientSkyKind.fog => 'Foggy sky',
-        AmbientSkyKind.snow => 'Snowy sky',
+        AmbientSkyKind.rain => 'Moving rainy sky',
+        AmbientSkyKind.thunderstorm => 'Moving thunderstorm sky',
+        AmbientSkyKind.fog => 'Moving foggy sky',
+        AmbientSkyKind.snow => 'Moving snowy sky',
         AmbientSkyKind.sunrise => 'Sunrise sky',
         AmbientSkyKind.sunset => 'Sunset sky',
       };
@@ -173,18 +163,18 @@ class _AmbientSkyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     final rect = Offset.zero & size;
-    final colors = _gradient(kind);
     canvas.drawRect(
       rect,
       Paint()
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: colors,
+          colors: _gradient(kind),
         ).createShader(rect),
     );
-
     if (_isNight(kind)) _stars(canvas, size);
     if (_showsSun(kind)) _sun(canvas, size);
     if (_showsClouds(kind)) _clouds(canvas, size);
@@ -195,7 +185,6 @@ class _AmbientSkyPainter extends CustomPainter {
     if (kind == AmbientSkyKind.fog) _fog(canvas, size);
     if (kind == AmbientSkyKind.snow) _snow(canvas, size);
     if (kind == AmbientSkyKind.thunderstorm) _lightning(canvas, size);
-
     canvas.drawRect(
       rect,
       Paint()
@@ -205,82 +194,68 @@ class _AmbientSkyPainter extends CustomPainter {
           colors: [Colors.transparent, Color(0x55000000)],
         ).createShader(rect),
     );
+    canvas.restore();
   }
 
   List<Color> _gradient(AmbientSkyKind value) => switch (value) {
-        AmbientSkyKind.clearDay => theme.weatherDay,
-        AmbientSkyKind.partlyCloudyDay => theme.weatherDay,
-        AmbientSkyKind.clearNight => theme.weatherNight,
-        AmbientSkyKind.partlyCloudyNight => theme.weatherNight,
+        AmbientSkyKind.clearDay || AmbientSkyKind.partlyCloudyDay =>
+          theme.weatherDay,
+        AmbientSkyKind.clearNight || AmbientSkyKind.partlyCloudyNight =>
+          theme.weatherNight,
         AmbientSkyKind.sunrise => const [
-            Color(0xFF475D88),
-            Color(0xFFE69C77),
-            Color(0xFFFFD7A8),
+            Color(0xFF475D88), Color(0xFFE69C77), Color(0xFFFFD7A8)
           ],
         AmbientSkyKind.sunset => const [
-            Color(0xFF362D69),
-            Color(0xFFC26373),
-            Color(0xFFF4B675),
+            Color(0xFF362D69), Color(0xFFC26373), Color(0xFFF4B675)
           ],
         AmbientSkyKind.rain => const [Color(0xFF40566A), Color(0xFF81909A)],
-        AmbientSkyKind.thunderstorm => const [
-            Color(0xFF171B2D),
-            Color(0xFF3C4358),
-          ],
+        AmbientSkyKind.thunderstorm => const [Color(0xFF171B2D), Color(0xFF3C4358)],
         AmbientSkyKind.fog => const [Color(0xFF8A979B), Color(0xFFD4D9D7)],
         AmbientSkyKind.snow => const [Color(0xFF8EA7BC), Color(0xFFE8F0F2)],
-        AmbientSkyKind.overcast => const [
-            Color(0xFF64747D),
-            Color(0xFFA8B1B3),
-          ],
+        AmbientSkyKind.overcast => const [Color(0xFF64747D), Color(0xFFA8B1B3)],
       };
 
   bool _isNight(AmbientSkyKind value) =>
       value == AmbientSkyKind.clearNight ||
       value == AmbientSkyKind.partlyCloudyNight;
-
   bool _showsSun(AmbientSkyKind value) =>
       value == AmbientSkyKind.clearDay ||
       value == AmbientSkyKind.partlyCloudyDay ||
       value == AmbientSkyKind.sunrise ||
       value == AmbientSkyKind.sunset;
-
   bool _showsClouds(AmbientSkyKind value) =>
       value != AmbientSkyKind.clearDay && value != AmbientSkyKind.clearNight;
 
   void _stars(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.white.withValues(alpha: .62);
     for (var i = 0; i < 25; i++) {
-      final x = ((i * 47.0) % size.width) +
-          math.sin(progress * math.pi * 2 + i) * 2;
+      final x = ((i * 47.0) % size.width) + math.sin(progress * math.pi * 2 + i) * 2;
       final y = (i * 29.0) % (size.height * .62);
-      final radius = .7 + ((i % 4) * .28);
-      canvas.drawCircle(Offset(x, y), radius, paint);
+      canvas.drawCircle(Offset(x, y), .7 + ((i % 4) * .28), paint);
     }
   }
 
   void _sun(Canvas canvas, Size size) {
-    final x = size.width *
-        (.72 + math.sin(progress * math.pi * 2) * .012);
-    final y = kind == AmbientSkyKind.sunrise
-        ? size.height * .56
-        : kind == AmbientSkyKind.sunset
-            ? size.height * .48
-            : size.height * .24;
-    final center = Offset(x, y);
+    final center = Offset(
+      size.width * (.72 + math.sin(progress * math.pi * 2) * .012),
+      kind == AmbientSkyKind.sunrise
+          ? size.height * .56
+          : kind == AmbientSkyKind.sunset
+              ? size.height * .48
+              : size.height * .24,
+    );
     canvas.drawCircle(
       center,
       size.shortestSide * .17,
       Paint()
-        ..shader = RadialGradient(
-          colors: [
-            Colors.white.withValues(alpha: .55),
-            const Color(0xFFFFD889).withValues(alpha: .08),
-            Colors.transparent,
-          ],
-        ).createShader(
-          Rect.fromCircle(center: center, radius: size.shortestSide * .17),
-        ),
+        ..shader = RadialGradient(colors: [
+          Colors.white.withValues(alpha: .55),
+          const Color(0xFFFFD889).withValues(alpha: .08),
+          Colors.transparent,
+        ]).createShader(Rect.fromCircle(
+          center: center,
+          radius: size.shortestSide * .17,
+        )),
     );
     canvas.drawCircle(
       center,
@@ -290,35 +265,23 @@ class _AmbientSkyPainter extends CustomPainter {
   }
 
   void _clouds(Canvas canvas, Size size) {
-    final cloudPaint = Paint()
+    final paint = Paint()
       ..color = Colors.white.withValues(
         alpha: kind == AmbientSkyKind.thunderstorm ? .12 : .25,
       );
-    for (var i = 0; i < 4; i++) {
-      final baseX =
-          ((i * size.width * .31) + progress * size.width * .18) %
-                  (size.width + 120) -
-              60;
-      final baseY = size.height * (.16 + i * .12);
-      final scale = .65 + i * .08;
+    for (var i = 0; i < 5; i++) {
+      final travel = size.width + 180;
+      final direction = i.isEven ? 1.0 : -1.0;
+      final raw = ((progress * direction + i * .21) % 1 + 1) % 1;
+      final x = raw * travel - 90;
+      final y = size.height * (.13 + i * .115);
+      final scale = .58 + i * .075;
       canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(baseX, baseY),
-          width: 98 * scale,
-          height: 28 * scale,
-        ),
-        cloudPaint,
+        Rect.fromCenter(center: Offset(x, y), width: 108 * scale, height: 31 * scale),
+        paint,
       );
-      canvas.drawCircle(
-        Offset(baseX - 20 * scale, baseY - 8 * scale),
-        19 * scale,
-        cloudPaint,
-      );
-      canvas.drawCircle(
-        Offset(baseX + 13 * scale, baseY - 13 * scale),
-        24 * scale,
-        cloudPaint,
-      );
+      canvas.drawCircle(Offset(x - 22 * scale, y - 8 * scale), 20 * scale, paint);
+      canvas.drawCircle(Offset(x + 15 * scale, y - 14 * scale), 25 * scale, paint);
     }
   }
 
@@ -341,11 +304,7 @@ class _AmbientSkyPainter extends CustomPainter {
     for (var i = 0; i < 5; i++) {
       final y = size.height * (.22 + i * .14);
       final shift = math.sin(progress * math.pi * 2 + i) * 24;
-      canvas.drawLine(
-        Offset(-30 + shift, y),
-        Offset(size.width + 30 + shift, y),
-        paint,
-      );
+      canvas.drawLine(Offset(-30 + shift, y), Offset(size.width + 30 + shift, y), paint);
     }
   }
 
@@ -359,8 +318,7 @@ class _AmbientSkyPainter extends CustomPainter {
   }
 
   void _lightning(Canvas canvas, Size size) {
-    final visible = progress > .47 && progress < .5;
-    if (!visible) return;
+    if (!(progress > .47 && progress < .49)) return;
     final path = Path()
       ..moveTo(size.width * .72, size.height * .12)
       ..lineTo(size.width * .62, size.height * .43)
