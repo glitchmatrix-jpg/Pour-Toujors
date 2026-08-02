@@ -1,5 +1,4 @@
 name: Android APK
-# Final pre-APK quality gate for the exact branch head.
 
 on:
   workflow_dispatch:
@@ -37,9 +36,9 @@ env:
 
 jobs:
   validate-and-build:
-    name: Validate and build APK
+    name: Validate foundation and build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Check out source
@@ -65,31 +64,22 @@ jobs:
             flutter create --platforms=android --org com.pourtoujours --project-name pour_toujours .
           fi
           rm -f test/widget_test.dart
-
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           text = manifest.read_text(encoding='utf-8')
+          root = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
           permission = '<uses-permission android:name="android.permission.INTERNET" />'
           if permission not in text:
-              root = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
               if root not in text:
                   raise RuntimeError('Android manifest root was not recognized.')
               text = text.replace(root, root + '\n    ' + permission, 1)
-
-          if 'android:label="pour_toujours"' not in text and 'android:label="Pour Toujours"' not in text:
-              raise RuntimeError('Android application label was not found.')
-          text = text.replace('android:label="pour_toujours"', 'android:label="Pour Toujours"', 1)
-
-          if 'android:icon="@mipmap/ic_launcher"' not in text and 'android:icon="@drawable/ic_pour_toujours"' not in text:
-              raise RuntimeError('Android launcher icon attribute was not found.')
-          text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_pour_toujours"', 1)
+          text = text.replace('android:label="pour_toujours"', 'android:label="Pour Toujours"')
+          text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_pour_toujours"')
           manifest.write_text(text, encoding='utf-8')
 
-          Path('android/app/src/main/res/drawable/ic_pour_toujours.xml').write_text(
-              '''<?xml version="1.0" encoding="utf-8"?>
+          Path('android/app/src/main/res/drawable/ic_pour_toujours.xml').write_text('''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
               android:viewportWidth="108" android:viewportHeight="108">
@@ -97,101 +87,21 @@ jobs:
             <path android:fillColor="#69B6AE" android:pathData="M54,20A34,34 0,1 0,54 88A34,34 0,1 0,54 20"/>
             <path android:fillColor="#0B3A43" android:pathData="M33,31L44,25L53,31L49,40L39,43L33,31M57,53L68,42L83,47L82,59L72,66L65,78L55,74L50,63L57,53M32,62L42,65L47,77L38,82L29,73L32,62"/>
             <path android:fillColor="#00000000" android:strokeColor="#F5F2E9" android:strokeWidth="5" android:strokeLineCap="round" android:pathData="M12,60C31,78 76,79 96,48"/>
-            <path android:fillColor="#00000000" android:strokeColor="#E8B64C" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M16,66C37,80 77,76 94,53"/>
             <path android:fillColor="#E8B64C" android:pathData="M82,18L85,25L92,28L85,31L82,38L79,31L72,28L79,25Z"/>
           </vector>
-          ''',
-              encoding='utf-8',
-          )
-
-          screen = Path('lib/features/home/premium_home_screen_v2.dart')
-          source = screen.read_text(encoding='utf-8')
-
-          literal_replacements = [
-              (
-                  "city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 10,",
-                  "city.name == 'Hattiesburg' ? 'H’burg' : city.name,\n                          style: const TextStyle(\n                            color: Colors.white70,\n                            fontSize: 9,",
-                  'compact world footer',
-              ),
-              (
-                  'height: 220,\n          clipBehavior: Clip.antiAlias,',
-                  'constraints: const BoxConstraints(minHeight: 220),\n          clipBehavior: Clip.antiAlias,',
-                  'content-sized weather card',
-              ),
-              (
-                  'height: 120,\n      child: ListView.separated(',
-                  'height: 134,\n      child: ListView.separated(',
-                  'birthday rail height',
-              ),
-              (
-                  'else if (weather == null)',
-                  'else if (weather == null || !weather.isLive)',
-                  'offline weather guard',
-              ),
-              (
-                  'const Spacer(),\n                      Text(\n                        weather.practicalLine,',
-                  'const SizedBox(height: 12),\n                      Text(\n                        weather.practicalLine,',
-                  'weather card content spacing',
-              ),
-          ]
-
-          for old, new, label in literal_replacements:
-              if new in source:
-                  continue
-              count = source.count(old)
-              if count != 1:
-                  raise RuntimeError(f'Expected one {label} target, found {count}.')
-              source = source.replace(old, new, 1)
-
-          responsive_condition = re.compile(
-              r'''Padding\(\s*
-                  padding:\s*const\s+EdgeInsets\.only\(bottom:\s*5\),\s*
-                  child:\s*Text\(\s*
-                  weather\.condition,\s*
-                  style:\s*TextStyle\(\s*
-                  color:\s*secondary,\s*
-                  fontSize:\s*15,\s*
-                  fontWeight:\s*FontWeight\.w600,\s*
-                  \),\s*
-                  \),\s*
-                  \),''',
-              re.VERBOSE,
-          )
-          replacement = '''Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 5),
-                              child: Text(
-                                weather.condition,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: secondary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),'''
-          if 'overflow: TextOverflow.ellipsis' not in source:
-              source, count = responsive_condition.subn(replacement, source, count=1)
-              if count != 1:
-                  raise RuntimeError(
-                      f'Expected one responsive weather condition target, found {count}.'
-                  )
-
-          screen.write_text(source, encoding='utf-8')
+          ''', encoding='utf-8')
           PY
 
       - name: Install Flutter packages
         run: flutter pub get
 
-      - name: Format checked sources
+      - name: Format sources
         run: dart format lib test
 
-      - name: Static analysis
+      - name: Strict static analysis
         run: flutter analyze --fatal-infos --fatal-warnings
 
-      - name: Run deterministic mobile QA tests
+      - name: Deterministic responsive QA
         run: flutter test --reporter expanded
 
       - name: Verify release identity
@@ -201,16 +111,16 @@ jobs:
           grep -F 'android:label="Pour Toujours"' android/app/src/main/AndroidManifest.xml
           grep -F 'android:icon="@drawable/ic_pour_toujours"' android/app/src/main/AndroidManifest.xml
           grep -F '<uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-          test -s android/app/src/main/res/drawable/ic_pour_toujours.xml
+          grep -F 'version: 0.6.0+6' pubspec.yaml
           test -s assets/brand/pour_toujours_mark.svg
 
       - name: Build debug APK
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'debug' || inputs.build_mode == 'both' }}
-        run: flutter build apk --debug --build-name=0.5.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --debug --build-name=0.6.0 --build-number=${{ github.run_number }}
 
       - name: Build release APK for QA
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_mode == 'release' || inputs.build_mode == 'both' }}
-        run: flutter build apk --release --build-name=0.5.0 --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-name=0.6.0 --build-number=${{ github.run_number }}
 
       - name: Collect APKs and checksums
         if: always()
@@ -222,9 +132,8 @@ jobs:
           if compgen -G 'dist/*.apk' > /dev/null; then
             (cd dist && sha256sum *.apk > SHA256SUMS.txt)
             ls -lh dist
-            cat dist/SHA256SUMS.txt
           else
-            echo "No APK was produced. A required QA or build step failed."
+            echo "No APK was produced because a required quality gate failed."
           fi
 
       - name: Upload debug APK
