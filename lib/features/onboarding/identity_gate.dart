@@ -35,7 +35,7 @@ class _IdentityGateState extends State<IdentityGate> {
       selected = valid
           ? familyMembers
               .firstWhere(
-                (member) => member.name.toLowerCase() == value!.toLowerCase(),
+                (member) => member.name.toLowerCase() == value.toLowerCase(),
               )
               .name
           : null;
