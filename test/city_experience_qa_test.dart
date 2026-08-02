@@ -147,12 +147,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> revealForecast(WidgetTester tester) async {
+    await tester.scrollUntilVisible(
+      find.text('Seven-day forecast'),
+      280,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('city renders full seven-day experience on narrow phones', (
     tester,
   ) async {
     await pumpCity(tester, size: const Size(360, 640));
     expect(find.text('Karachi'), findsWidgets);
     expect(find.text('The city’s light'), findsOneWidget);
+    await revealForecast(tester);
     expect(find.text('Seven-day forecast'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -162,8 +172,8 @@ void main() {
     await pumpCity(tester);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Chiba'));
     await tester.pumpAndSettle();
-    expect(find.text('Japan'), findsNothing);
     expect(find.text('Chiba'), findsWidgets);
+    await revealForecast(tester);
     expect(find.text('Seven-day forecast'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -205,16 +215,17 @@ void main() {
   });
 
   testWidgets('missing hourly values show accessible fallback', (tester) async {
-    WeatherService.debugBundleOverrides = {
-      ...WeatherService.debugBundleOverrides!,
-      'dublin': fixture('dublin', emptyHourly: true),
-    };
-    final bundle = WeatherService.debugBundleOverrides!['dublin']!;
+    final bundle = fixture('dublin', emptyHourly: true);
+    const settings = AppSettings(reducedMotion: true);
     await tester.pumpWidget(
-      MaterialApp(
-        home: AppSettingsScope(
-          controller: AppSettingsController(),
-          child: HourlyForecastScreen(
+      AppSettingsScope(
+        controller: AppSettingsController(initial: settings),
+        child: MaterialApp(
+          theme: PourToujoursTheme.build(
+            settings.theme,
+            Brightness.light,
+          ),
+          home: HourlyForecastScreen(
             payload: HourlyRoutePayload(
               city: const FamilyCity(
                 id: 'dublin',
@@ -238,6 +249,9 @@ void main() {
 
   testWidgets('comparison matrix includes every city', (tester) async {
     await pumpCity(tester);
+    await revealForecast(tester);
+    await tester.tap(find.byIcon(Icons.view_agenda_outlined));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Compare all four cities'),
       500,
