@@ -121,7 +121,7 @@ class _AmbientSkyState extends State<AmbientSky>
     final kind = ambientSkyKindFor(widget.weather, widget.day);
     final resolvedHeight = widget.height == null
         ? null
-        : math.max(widget.height!, 250).toDouble();
+        : math.max(widget.height!, 290).toDouble();
     return Semantics(
       container: true,
       label: widget.semanticLabel ?? _description(kind),
