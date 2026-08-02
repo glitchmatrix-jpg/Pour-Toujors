@@ -11,6 +11,10 @@ abstract final class PourToujoursRouteNames {
   static const hourlyWeather = '/weather/hourly';
   static const weatherCompare = '/weather/compare';
   static const person = '/person';
+
+  /// Kept only so retired source files continue to analyze. No route handles it.
+  static const overlapPlanner = '/planner-retired';
+
   static const calendar = '/calendar';
   static const eventEditor = '/event';
   static const holiday = '/holiday';
