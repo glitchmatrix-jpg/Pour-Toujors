@@ -1,4 +1,5 @@
 name: Android APK
+# Final pre-APK quality gate for the exact branch head.
 
 on:
   workflow_dispatch:
