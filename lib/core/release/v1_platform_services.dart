@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,26 +21,54 @@ class V1PlatformServices {
   final FlutterLocalNotificationsPlugin notifications =
       FlutterLocalNotificationsPlugin();
 
-  bool _initialized = false;
+  Future<void>? _initializing;
+  Future<void> _widgetQueue = Future<void>.value();
 
-  Future<void> initialize() async {
-    if (_initialized || kIsWeb) return;
-    const android = AndroidInitializationSettings('@drawable/ic_pour_toujours');
-    const settings = InitializationSettings(android: android);
-    await notifications.initialize(settings);
-    _initialized = true;
+  bool get _supportsAndroidNativeFeatures =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> initialize() {
+    if (!_supportsAndroidNativeFeatures) return Future<void>.value();
+    return _initializing ??= _initializeSafely();
+  }
+
+  Future<void> _initializeSafely() async {
+    try {
+      const android = AndroidInitializationSettings('@drawable/ic_pour_toujours');
+      const settings = InitializationSettings(android: android);
+      await notifications.initialize(settings);
+    } on MissingPluginException {
+      debugPrint('Native notification plugin is not attached to this engine.');
+    } on PlatformException catch (error, stackTrace) {
+      debugPrint('Notification initialization failed: $error\n$stackTrace');
+    } on Object catch (error, stackTrace) {
+      debugPrint('Unexpected notification initialization failure: $error\n$stackTrace');
+    }
   }
 
   Future<bool> requestNotificationPermission() async {
+    if (!_supportsAndroidNativeFeatures) return false;
     await initialize();
-    final android = notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    return await android?.requestNotificationsPermission() ?? false;
+    try {
+      final android = notifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.requestNotificationsPermission() ?? false;
+    } on PlatformException catch (error) {
+      debugPrint('Notification permission request failed: $error');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
   }
 
   Future<bool> notificationsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(NotificationPreferences.enabledKey) ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(NotificationPreferences.enabledKey) ?? false;
+    } on Object catch (error) {
+      debugPrint('Could not read notification state: $error');
+      return false;
+    }
   }
 
   Future<void> scheduleReminder({
@@ -49,8 +79,11 @@ class V1PlatformServices {
     String payload = 'pourtoujours://calendar',
     NotificationUrgency urgency = NotificationUrgency.normal,
   }) async {
+    if (!_supportsAndroidNativeFeatures || id < 0) return;
     final preferences = await NotificationPreferences.load();
     if (!preferences.enabled || preferences.isQuiet(when)) return;
+    if (!when.isAfter(tz.TZDateTime.now(when.location))) return;
+
     await initialize();
     final channel = urgency == NotificationUrgency.urgent
         ? const AndroidNotificationDetails(
@@ -70,36 +103,71 @@ class V1PlatformServices {
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
           );
-    await notifications.zonedSchedule(
-      id,
-      title,
-      body,
-      when,
-      NotificationDetails(android: channel),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: payload,
-    );
+    try {
+      await notifications.zonedSchedule(
+        id,
+        title.trim().isEmpty ? 'Pour Toujours' : title.trim(),
+        body.trim(),
+        when,
+        NotificationDetails(android: channel),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: payload,
+      );
+    } on PlatformException catch (error, stackTrace) {
+      debugPrint('Reminder scheduling failed safely: $error\n$stackTrace');
+    } on MissingPluginException {
+      debugPrint('Reminder plugin unavailable; no reminder was scheduled.');
+    }
   }
 
-  Future<void> cancelReminder(int id) => notifications.cancel(id);
+  Future<void> cancelReminder(int id) async {
+    if (!_supportsAndroidNativeFeatures) return;
+    await initialize();
+    try {
+      await notifications.cancel(id);
+    } on Object catch (error) {
+      debugPrint('Reminder cancellation failed safely: $error');
+    }
+  }
 
-  Future<void> cancelAllReminders() => notifications.cancelAll();
+  Future<void> cancelAllReminders() async {
+    if (!_supportsAndroidNativeFeatures) return;
+    await initialize();
+    try {
+      await notifications.cancelAll();
+    } on Object catch (error) {
+      debugPrint('Reminder cancellation failed safely: $error');
+    }
+  }
 
   /// Writes one compact, offline-safe snapshot shared by all Android widgets.
   /// Native widgets keep rendering the last successful snapshot when the app
   /// cannot reach weather or holiday providers.
-  Future<void> updateHomeWidgets(WidgetSnapshot snapshot) async {
-    if (kIsWeb) return;
-    final values = snapshot.toMap();
-    for (final entry in values.entries) {
-      await HomeWidget.saveWidgetData<String>(entry.key, entry.value);
-    }
-    for (final provider in const [
-      'PourToujoursSmallWidget',
-      'PourToujoursMediumWidget',
-      'PourToujoursLargeWidget',
-    ]) {
-      await HomeWidget.updateWidget(androidName: provider);
+  Future<void> updateHomeWidgets(WidgetSnapshot snapshot) {
+    if (!_supportsAndroidNativeFeatures) return Future<void>.value();
+    _widgetQueue = _widgetQueue.then((_) => _writeWidgetSnapshot(snapshot));
+    return _widgetQueue;
+  }
+
+  Future<void> _writeWidgetSnapshot(WidgetSnapshot snapshot) async {
+    try {
+      final values = snapshot.sanitized().toMap();
+      for (final entry in values.entries) {
+        await HomeWidget.saveWidgetData<String>(entry.key, entry.value);
+      }
+      for (final provider in const [
+        'PourToujoursSmallWidget',
+        'PourToujoursMediumWidget',
+        'PourToujoursLargeWidget',
+      ]) {
+        await HomeWidget.updateWidget(androidName: provider);
+      }
+    } on MissingPluginException {
+      debugPrint('Home widget plugin is not attached to this engine.');
+    } on PlatformException catch (error, stackTrace) {
+      debugPrint('Home widget update failed safely: $error\n$stackTrace');
+    } on Object catch (error, stackTrace) {
+      debugPrint('Unexpected home widget update failure: $error\n$stackTrace');
     }
   }
 }
@@ -135,12 +203,12 @@ class NotificationPreferences {
   final int minimumAlertSeverity;
 
   bool isQuiet(tz.TZDateTime value) {
+    final start = quietStartHour.clamp(0, 23);
+    final end = quietEndHour.clamp(0, 23);
     final hour = value.hour;
-    if (quietStartHour == quietEndHour) return false;
-    if (quietStartHour < quietEndHour) {
-      return hour >= quietStartHour && hour < quietEndHour;
-    }
-    return hour >= quietStartHour || hour < quietEndHour;
+    if (start == end) return false;
+    if (start < end) return hour >= start && hour < end;
+    return hour >= start || hour < end;
   }
 
   NotificationPreferences copyWith({
@@ -176,10 +244,10 @@ class NotificationPreferences {
         'callWindows': callWindows,
         'dstChanges': dstChanges,
         'severeWeather': severeWeather,
-        'quietStartHour': quietStartHour,
-        'quietEndHour': quietEndHour,
-        'birthdayLeadDays': birthdayLeadDays,
-        'minimumAlertSeverity': minimumAlertSeverity,
+        'quietStartHour': quietStartHour.clamp(0, 23),
+        'quietEndHour': quietEndHour.clamp(0, 23),
+        'birthdayLeadDays': birthdayLeadDays.clamp(0, 30),
+        'minimumAlertSeverity': minimumAlertSeverity.clamp(1, 5),
       };
 
   static NotificationPreferences fromMap(Map<String, Object?> map) =>
@@ -190,27 +258,38 @@ class NotificationPreferences {
         callWindows: map['callWindows'] as bool? ?? false,
         dstChanges: map['dstChanges'] as bool? ?? true,
         severeWeather: map['severeWeather'] as bool? ?? true,
-        quietStartHour: map['quietStartHour'] as int? ?? 22,
-        quietEndHour: map['quietEndHour'] as int? ?? 8,
-        birthdayLeadDays: map['birthdayLeadDays'] as int? ?? 1,
-        minimumAlertSeverity: map['minimumAlertSeverity'] as int? ?? 2,
+        quietStartHour: (map['quietStartHour'] as num? ?? 22).toInt().clamp(0, 23),
+        quietEndHour: (map['quietEndHour'] as num? ?? 8).toInt().clamp(0, 23),
+        birthdayLeadDays:
+            (map['birthdayLeadDays'] as num? ?? 1).toInt().clamp(0, 30),
+        minimumAlertSeverity:
+            (map['minimumAlertSeverity'] as num? ?? 2).toInt().clamp(1, 5),
       );
 
   static Future<NotificationPreferences> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(storageKey);
-    if (raw == null) return const NotificationPreferences();
     try {
-      return fromMap(jsonDecode(raw) as Map<String, Object?>);
-    } on Object {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(storageKey);
+      if (raw == null) return const NotificationPreferences();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return const NotificationPreferences();
+      }
+      return fromMap(decoded);
+    } on Object catch (error) {
+      debugPrint('Notification preferences were invalid and reset: $error');
       return const NotificationPreferences();
     }
   }
 
   Future<void> save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(enabledKey, enabled);
-    await prefs.setString(storageKey, jsonEncode(toMap()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(enabledKey, enabled);
+      await prefs.setString(storageKey, jsonEncode(toMap()));
+    } on Object catch (error) {
+      debugPrint('Could not save notification preferences: $error');
+    }
   }
 }
 
@@ -235,6 +314,17 @@ class WidgetSnapshot {
   final DateTime updatedAt;
   final bool isStale;
 
+  WidgetSnapshot sanitized() => WidgetSnapshot(
+        primaryLine: _clean(primaryLine, 72),
+        secondaryLine: _clean(secondaryLine, 110),
+        citiesLine: _clean(citiesLine, 180),
+        timelineLine: _clean(timelineLine, 150),
+        nextEventLine: _clean(nextEventLine, 110),
+        alertLine: _clean(alertLine, 110),
+        updatedAt: updatedAt,
+        isStale: isStale,
+      );
+
   Map<String, String> toMap() => {
         'pt_primary': primaryLine,
         'pt_secondary': secondaryLine,
@@ -245,6 +335,13 @@ class WidgetSnapshot {
         'pt_updated': updatedAt.toUtc().toIso8601String(),
         'pt_stale': isStale ? '1' : '0',
       };
+
+  static String _clean(String value, int maximum) {
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) return 'Open Pour Toujours';
+    if (normalized.length <= maximum) return normalized;
+    return '${normalized.substring(0, maximum - 1).trimRight()}…';
+  }
 }
 
 /// Platform-neutral contract reserved for a future iOS WidgetKit extension.
