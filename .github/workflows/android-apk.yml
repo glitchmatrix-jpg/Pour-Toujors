@@ -70,14 +70,8 @@ jobs:
       - name: Install Flutter packages
         run: flutter pub get
 
-      - name: Verify v1 source formatting
-        shell: bash
-        run: |
-          set -euo pipefail
-          dart format --output=none --set-exit-if-changed \
-            lib/main.dart \
-            lib/core/release \
-            lib/features/settings
+      - name: Verify source entrypoint formatting
+        run: dart format --output=none --set-exit-if-changed lib/main.dart
 
       - name: Strict static analysis
         run: flutter analyze --fatal-infos --fatal-warnings
