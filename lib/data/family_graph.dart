@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+
+import '../app/theme/pour_toujours_theme.dart';
 import 'family_seed.dart';
 
 enum FamilyGender { female, male, unspecified }
@@ -73,7 +76,12 @@ class FamilyGraph {
     final spouse = _spouseOf(person);
     if (spouse != null && _isParent(spouse, viewer)) return 'Parent-in-law';
     if (spouse != null && _parentsOf(viewer).contains(spouse)) {
-      return _gendered(person, female: 'Sister-in-law', male: 'Brother-in-law', other: 'In-law');
+      return _gendered(
+        person,
+        female: 'Sister-in-law',
+        male: 'Brother-in-law',
+        other: 'In-law',
+      );
     }
 
     final viewerParentSiblings = <String>{};
@@ -81,13 +89,25 @@ class FamilyGraph {
       viewerParentSiblings.addAll(_siblingsOf(parent));
     }
     if (viewerParentSiblings.contains(person)) {
-      return _gendered(person, female: 'Aunt', male: 'Uncle', other: 'Family member');
+      return _gendered(
+        person,
+        female: 'Aunt',
+        male: 'Uncle',
+        other: 'Family member',
+      );
     }
-    if (viewerParentSiblings.contains(_spouseOf(person))) return 'Aunt or uncle by marriage';
+    if (viewerParentSiblings.contains(_spouseOf(person))) {
+      return 'Aunt or uncle by marriage';
+    }
 
     for (final sibling in _siblingsOf(viewer)) {
       if (_isParent(sibling, person)) {
-        return _gendered(person, female: 'Niece', male: 'Nephew', other: 'Family member');
+        return _gendered(
+          person,
+          female: 'Niece',
+          male: 'Nephew',
+          other: 'Family member',
+        );
       }
     }
 
@@ -132,7 +152,10 @@ class FamilyGraph {
   }
 
   Set<String> _parentsOf(String child) => links
-      .where((link) => link.type == FamilyLinkType.parent && _same(link.second, child))
+      .where(
+        (link) =>
+            link.type == FamilyLinkType.parent && _same(link.second, child),
+      )
       .map((link) => link.first)
       .toSet();
 
@@ -140,9 +163,11 @@ class FamilyGraph {
     final parents = _parentsOf(person);
     if (parents.isEmpty) return const {};
     return familyMembers
-        .where((candidate) =>
-            !_same(candidate.name, person) &&
-            _parentsOf(candidate.name).intersection(parents).isNotEmpty)
+        .where(
+          (candidate) =>
+              !_same(candidate.name, person) &&
+              _parentsOf(candidate.name).intersection(parents).isNotEmpty,
+        )
         .map((candidate) => candidate.name)
         .toSet();
   }
@@ -168,11 +193,10 @@ class FamilyGraph {
     };
   }
 
-  static bool _same(String first, String second) => _normal(first) == _normal(second);
-  static String _normal(String value) => value
-      .replaceAll('İ', 'I')
-      .trim()
-      .toLowerCase();
+  static bool _same(String first, String second) =>
+      _normal(first) == _normal(second);
+  static String _normal(String value) =>
+      value.replaceAll('İ', 'I').trim().toLowerCase();
 }
 
 const familyGraph = FamilyGraph(
@@ -203,13 +227,55 @@ const familyGraph = FamilyGraph(
     FamilyLink(first: 'Ami', second: 'Talat', type: FamilyLinkType.parent),
     FamilyLink(first: 'Nanu', second: 'Talat', type: FamilyLinkType.parent),
     FamilyLink(first: 'Ami', second: 'Nanu', type: FamilyLinkType.spouse),
-    FamilyLink(first: 'Hasan', second: 'Nighat', type: FamilyLinkType.custom, customFromFirst: 'Aunt', customFromSecond: 'Nephew'),
-    FamilyLink(first: 'Hasan', second: 'İmran', type: FamilyLinkType.custom, customFromFirst: 'Uncle', customFromSecond: 'Nephew'),
-    FamilyLink(first: 'Hasan', second: 'Raffat', type: FamilyLinkType.custom, customFromFirst: 'Aunt', customFromSecond: 'Nephew'),
-    FamilyLink(first: 'Hasan', second: 'Yasin', type: FamilyLinkType.custom, customFromFirst: 'Uncle', customFromSecond: 'Nephew'),
-    FamilyLink(first: 'Hasan', second: 'Affan', type: FamilyLinkType.custom, customFromFirst: 'Cousin', customFromSecond: 'Cousin'),
-    FamilyLink(first: 'Hasan', second: 'Sarwat', type: FamilyLinkType.custom, customFromFirst: 'Aunt', customFromSecond: 'Nephew'),
-    FamilyLink(first: 'Hasan', second: 'Asma', type: FamilyLinkType.custom, customFromFirst: 'Aunt', customFromSecond: 'Nephew'),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Nighat',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Aunt',
+      customFromSecond: 'Nephew',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'İmran',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Uncle',
+      customFromSecond: 'Nephew',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Raffat',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Aunt',
+      customFromSecond: 'Nephew',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Yasin',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Uncle',
+      customFromSecond: 'Nephew',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Affan',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Cousin',
+      customFromSecond: 'Cousin',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Sarwat',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Aunt',
+      customFromSecond: 'Nephew',
+    ),
+    FamilyLink(
+      first: 'Hasan',
+      second: 'Asma',
+      type: FamilyLinkType.custom,
+      customFromFirst: 'Aunt',
+      customFromSecond: 'Nephew',
+    ),
   ],
   missingLinks: [
     'Parentage and spouse links for Nighat, Imran, Raffat, Yasin, Sarwat, Asma, and Affan are not recorded.',
@@ -217,3 +283,7 @@ const familyGraph = FamilyGraph(
     'Birth years, preferred pronouns, and additional grandparents remain unknown unless supplied.',
   ],
 );
+
+extension PtThemeAccentAlias on PtThemeTokens {
+  Color get accent => globeAccent;
+}
