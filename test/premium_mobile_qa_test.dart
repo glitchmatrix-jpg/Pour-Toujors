@@ -174,14 +174,8 @@ void main() {
     await tester.pump();
     expect(controller.value.theme, PtThemeCollection.cherryCola);
 
-    final settingsScroll = find.byType(Scrollable).first;
     final switchTile = find.widgetWithText(SwitchListTile, 'Reduce motion');
-    await tester.scrollUntilVisible(
-      switchTile,
-      320,
-      scrollable: settingsScroll,
-    );
-    await tester.drag(settingsScroll, const Offset(0, -100));
+    await tester.ensureVisible(switchTile);
     await tester.pumpAndSettle();
     await tester.tap(switchTile);
     await tester.pump();
